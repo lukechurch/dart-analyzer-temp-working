@@ -11,6 +11,7 @@ import 'package:unittest/unittest.dart';
 import '../reflective_tests.dart';
 import 'resolver_test.dart';
 
+
 main() {
   groupSep = ' | ';
   runReflectiveTests(StaticTypeWarningCodeTest);
@@ -86,7 +87,8 @@ main() {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.EXPECTED_ONE_LIST_TYPE_ARGUMENTS]);
+        source,
+        [StaticTypeWarningCode.EXPECTED_ONE_LIST_TYPE_ARGUMENTS]);
     verify([source]);
   }
 
@@ -97,7 +99,8 @@ main() {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.EXPECTED_TWO_MAP_TYPE_ARGUMENTS]);
+        source,
+        [StaticTypeWarningCode.EXPECTED_TWO_MAP_TYPE_ARGUMENTS]);
     verify([source]);
   }
 
@@ -108,7 +111,8 @@ main() {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.EXPECTED_TWO_MAP_TYPE_ARGUMENTS]);
+        source,
+        [StaticTypeWarningCode.EXPECTED_TWO_MAP_TYPE_ARGUMENTS]);
     verify([source]);
   }
 
@@ -117,10 +121,9 @@ main() {
 int f() async {}
 ''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.ILLEGAL_ASYNC_RETURN_TYPE,
-      HintCode.MISSING_RETURN
-    ]);
+    assertErrors(
+        source,
+        [StaticTypeWarningCode.ILLEGAL_ASYNC_RETURN_TYPE, HintCode.MISSING_RETURN]);
     verify([source]);
   }
 
@@ -130,7 +133,8 @@ int f() async* {}
 ''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.ILLEGAL_ASYNC_GENERATOR_RETURN_TYPE]);
+        source,
+        [StaticTypeWarningCode.ILLEGAL_ASYNC_GENERATOR_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -142,7 +146,8 @@ class C {
 ''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.ILLEGAL_ASYNC_GENERATOR_RETURN_TYPE]);
+        source,
+        [StaticTypeWarningCode.ILLEGAL_ASYNC_GENERATOR_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -153,10 +158,9 @@ class C {
 }
 ''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.ILLEGAL_ASYNC_RETURN_TYPE,
-      HintCode.MISSING_RETURN
-    ]);
+    assertErrors(
+        source,
+        [StaticTypeWarningCode.ILLEGAL_ASYNC_RETURN_TYPE, HintCode.MISSING_RETURN]);
     verify([source]);
   }
 
@@ -166,7 +170,8 @@ int f() sync* {}
 ''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.ILLEGAL_SYNC_GENERATOR_RETURN_TYPE]);
+        source,
+        [StaticTypeWarningCode.ILLEGAL_SYNC_GENERATOR_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -178,7 +183,8 @@ class C {
 ''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.ILLEGAL_SYNC_GENERATOR_RETURN_TYPE]);
+        source,
+        [StaticTypeWarningCode.ILLEGAL_SYNC_GENERATOR_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -194,7 +200,8 @@ class C implements A, B {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.INCONSISTENT_METHOD_INHERITANCE]);
+        source,
+        [StaticTypeWarningCode.INCONSISTENT_METHOD_INHERITANCE]);
     verify([source]);
   }
 
@@ -209,7 +216,8 @@ abstract class B {
 abstract class C implements A, B {}''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.INCONSISTENT_METHOD_INHERITANCE]);
+        source,
+        [StaticTypeWarningCode.INCONSISTENT_METHOD_INHERITANCE]);
     verify([source]);
   }
 
@@ -224,7 +232,8 @@ abstract class B {
 abstract class C implements A, B {}''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.INCONSISTENT_METHOD_INHERITANCE]);
+        source,
+        [StaticTypeWarningCode.INCONSISTENT_METHOD_INHERITANCE]);
     verify([source]);
   }
 
@@ -238,7 +247,8 @@ main(A a) {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.INSTANCE_ACCESS_TO_STATIC_MEMBER]);
+        source,
+        [StaticTypeWarningCode.INSTANCE_ACCESS_TO_STATIC_MEMBER]);
     verify([source]);
   }
 
@@ -252,7 +262,8 @@ main(A a) {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.INSTANCE_ACCESS_TO_STATIC_MEMBER]);
+        source,
+        [StaticTypeWarningCode.INSTANCE_ACCESS_TO_STATIC_MEMBER]);
     verify([source]);
   }
 
@@ -266,7 +277,8 @@ main(A a) {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.INSTANCE_ACCESS_TO_STATIC_MEMBER]);
+        source,
+        [StaticTypeWarningCode.INSTANCE_ACCESS_TO_STATIC_MEMBER]);
     verify([source]);
   }
 
@@ -280,7 +292,8 @@ main(A a) {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.INSTANCE_ACCESS_TO_STATIC_MEMBER]);
+        source,
+        [StaticTypeWarningCode.INSTANCE_ACCESS_TO_STATIC_MEMBER]);
     verify([source]);
   }
 
@@ -294,7 +307,8 @@ main(A a) {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.INSTANCE_ACCESS_TO_STATIC_MEMBER]);
+        source,
+        [StaticTypeWarningCode.INSTANCE_ACCESS_TO_STATIC_MEMBER]);
     verify([source]);
   }
 
@@ -496,7 +510,8 @@ f() {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.INVOCATION_OF_NON_FUNCTION_EXPRESSION]);
+        source,
+        [StaticTypeWarningCode.INVOCATION_OF_NON_FUNCTION_EXPRESSION]);
     verify([source]);
   }
 
@@ -681,10 +696,11 @@ int f() async {
 }
 ''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.RETURN_OF_INVALID_TYPE,
-      StaticTypeWarningCode.ILLEGAL_ASYNC_RETURN_TYPE
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticTypeWarningCode.RETURN_OF_INVALID_TYPE,
+            StaticTypeWarningCode.ILLEGAL_ASYNC_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -785,7 +801,8 @@ class G<E extends A> {}
 class D = G<B> with C;''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -797,7 +814,8 @@ class G<E extends A> {}
 class C extends G<B>{}''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -808,7 +826,8 @@ class X<T extends Type> {}
 class Y<U> extends X<U> {}''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -823,7 +842,8 @@ class C {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -835,7 +855,8 @@ class G<E extends A> {}
 G<B> f() { return null; }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -847,7 +868,8 @@ class G<E extends A> {}
 typedef G<B> f();''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -859,7 +881,8 @@ class G<E extends A> {}
 f(G<B> h()) {}''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -871,7 +894,8 @@ class G<E extends A> {}
 class C implements G<B>{}''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -883,7 +907,8 @@ class G<E extends A> {}
 var b = 1 is G<B>;''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -897,7 +922,8 @@ class C {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -909,7 +935,8 @@ class G<E extends A> {}
 f() { return new G<B>(); }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -922,7 +949,8 @@ class G<E extends B> {}
 f() { return new G<A>(); }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -934,7 +962,8 @@ class G<E extends A> {}
 f(G<B> g) {}''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -947,10 +976,11 @@ class X<T extends A> {
   factory X.name(int x, int y) = X<B>;
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS,
-      StaticWarningCode.REDIRECT_TO_INVALID_RETURN_TYPE
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS,
+            StaticWarningCode.REDIRECT_TO_INVALID_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -963,7 +993,8 @@ class D<E extends A> {}
 C<D<B>> Var;''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -976,7 +1007,8 @@ class G<E extends A> {}
 class D<F extends G<B>> {}''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -988,7 +1020,8 @@ class G<E extends A> {}
 G<B> g;''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -1000,7 +1033,8 @@ class G<E extends A> {}
 class C extends Object with G<B>{}''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
+        source,
+        [StaticTypeWarningCode.TYPE_ARGUMENT_NOT_MATCHING_BOUNDS]);
     verify([source]);
   }
 
@@ -1010,11 +1044,13 @@ class A<T extends T> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.TYPE_PARAMETER_SUPERTYPE_OF_ITS_BOUND]);
+        source,
+        [StaticTypeWarningCode.TYPE_PARAMETER_SUPERTYPE_OF_ITS_BOUND]);
     verify([source]);
   }
 
-  void test_typePromotion_booleanAnd_useInRight_accessedInClosureRight_mutated() {
+  void
+      test_typePromotion_booleanAnd_useInRight_accessedInClosureRight_mutated() {
     Source source = addSource(r'''
 callMe(f()) { f(); }
 main(Object p) {
@@ -1043,7 +1079,8 @@ main(Object p) {
     assertErrors(source, [StaticTypeWarningCode.UNDEFINED_GETTER]);
   }
 
-  void test_typePromotion_conditional_useInThen_accessedInClosure_hasAssignment_after() {
+  void
+      test_typePromotion_conditional_useInThen_accessedInClosure_hasAssignment_after() {
     Source source = addSource(r'''
 callMe(f()) { f(); }
 main(Object p) {
@@ -1054,7 +1091,8 @@ main(Object p) {
     assertErrors(source, [StaticTypeWarningCode.UNDEFINED_GETTER]);
   }
 
-  void test_typePromotion_conditional_useInThen_accessedInClosure_hasAssignment_before() {
+  void
+      test_typePromotion_conditional_useInThen_accessedInClosure_hasAssignment_before() {
     Source source = addSource(r'''
 callMe(f()) { f(); }
 main(Object p) {
@@ -1332,7 +1370,8 @@ main(A<int> a) {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
+        source,
+        [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
     verify([source]);
   }
 
@@ -1346,7 +1385,8 @@ main(A<int,int> a) {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
+        source,
+        [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
     verify([source]);
   }
 
@@ -1614,9 +1654,9 @@ class B extends A {
   }
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.UNQUALIFIED_REFERENCE_TO_NON_LOCAL_STATIC_MEMBER
-    ]);
+    assertErrors(
+        source,
+        [StaticTypeWarningCode.UNQUALIFIED_REFERENCE_TO_NON_LOCAL_STATIC_MEMBER]);
     verify([source]);
   }
 
@@ -1631,9 +1671,9 @@ class B extends A {
   }
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.UNQUALIFIED_REFERENCE_TO_NON_LOCAL_STATIC_MEMBER
-    ]);
+    assertErrors(
+        source,
+        [StaticTypeWarningCode.UNQUALIFIED_REFERENCE_TO_NON_LOCAL_STATIC_MEMBER]);
     verify([source]);
   }
 
@@ -1648,9 +1688,9 @@ class B extends A {
   }
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.UNQUALIFIED_REFERENCE_TO_NON_LOCAL_STATIC_MEMBER
-    ]);
+    assertErrors(
+        source,
+        [StaticTypeWarningCode.UNQUALIFIED_REFERENCE_TO_NON_LOCAL_STATIC_MEMBER]);
     verify([source]);
   }
 
@@ -1661,7 +1701,8 @@ class M {}
 class B<F extends num> = A<F> with M;''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
+        source,
+        [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
     verify([source]);
   }
 
@@ -1671,7 +1712,8 @@ class A<E, F> {}
 A<A> a = null;''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
+        source,
+        [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
     verify([source]);
   }
 
@@ -1681,7 +1723,8 @@ class A<E> {}
 A<A, A> a = null;''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
+        source,
+        [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
     verify([source]);
   }
 
@@ -1694,7 +1737,8 @@ f(p) {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
+        source,
+        [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
     verify([source]);
   }
 
@@ -1707,7 +1751,8 @@ f(p) {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
+        source,
+        [StaticTypeWarningCode.WRONG_NUMBER_OF_TYPE_ARGUMENTS]);
     verify([source]);
   }
 
@@ -1718,10 +1763,11 @@ int f() async* {
 }
 ''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.YIELD_OF_INVALID_TYPE,
-      StaticTypeWarningCode.ILLEGAL_ASYNC_GENERATOR_RETURN_TYPE
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticTypeWarningCode.YIELD_OF_INVALID_TYPE,
+            StaticTypeWarningCode.ILLEGAL_ASYNC_GENERATOR_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1732,10 +1778,11 @@ Iterable<int> f() async* {
 }
 ''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.YIELD_OF_INVALID_TYPE,
-      StaticTypeWarningCode.ILLEGAL_ASYNC_GENERATOR_RETURN_TYPE
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticTypeWarningCode.YIELD_OF_INVALID_TYPE,
+            StaticTypeWarningCode.ILLEGAL_ASYNC_GENERATOR_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1805,10 +1852,11 @@ int f() sync* {
 }
 ''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.YIELD_OF_INVALID_TYPE,
-      StaticTypeWarningCode.ILLEGAL_SYNC_GENERATOR_RETURN_TYPE
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticTypeWarningCode.YIELD_OF_INVALID_TYPE,
+            StaticTypeWarningCode.ILLEGAL_SYNC_GENERATOR_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1831,10 +1879,11 @@ Stream<int> f() sync* {
 }
 ''');
     resolve(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.YIELD_OF_INVALID_TYPE,
-      StaticTypeWarningCode.ILLEGAL_SYNC_GENERATOR_RETURN_TYPE
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticTypeWarningCode.YIELD_OF_INVALID_TYPE,
+            StaticTypeWarningCode.ILLEGAL_SYNC_GENERATOR_RETURN_TYPE]);
     verify([source]);
   }
 }

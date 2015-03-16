@@ -154,7 +154,8 @@ abstract class AnalysisTask {
     } on AnalysisException catch (exception, stackTrace) {
       caughtException = new CaughtException(exception, stackTrace);
       AnalysisEngine.instance.logger.logInformation(
-          "Task failed: ${description}", caughtException);
+          "Task failed: ${description}",
+          caughtException);
     }
   }
 
@@ -177,7 +178,8 @@ abstract class AnalysisTask {
         contextName = 'unnamed';
       }
       AnalysisEngine.instance.instrumentationService.logAnalysisTask(
-          contextName, description);
+          contextName,
+          description);
       //
       // Gather statistics on the performance of the task.
       //
@@ -264,8 +266,8 @@ abstract class TaskDescriptor {
    * the instance of [AnalysisTask] thusly described.
    */
   factory TaskDescriptor(String name, BuildTask buildTask,
-      CreateTaskInputs inputBuilder,
-      List<ResultDescriptor> results) = TaskDescriptorImpl;
+      CreateTaskInputs inputBuilder, List<ResultDescriptor> results) =
+      TaskDescriptorImpl;
 
   /**
    * Return the builder used to build the inputs to the task.

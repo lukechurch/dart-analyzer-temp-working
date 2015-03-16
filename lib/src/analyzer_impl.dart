@@ -16,7 +16,6 @@ import 'package:analyzer/source/pub_package_map_provider.dart';
 import 'package:analyzer/src/error_formatter.dart';
 import 'package:analyzer/src/generated/java_core.dart' show JavaSystem;
 import 'package:analyzer/src/generated/java_engine.dart';
-import 'package:analyzer/src/generated/utilities_general.dart';
 
 import '../options.dart';
 import 'generated/constant.dart';
@@ -26,6 +25,7 @@ import 'generated/error.dart';
 import 'generated/java_io.dart';
 import 'generated/sdk_io.dart';
 import 'generated/source_io.dart';
+import 'package:analyzer/src/generated/utilities_general.dart';
 
 DirectoryBasedDartSdk sdk;
 
@@ -40,12 +40,6 @@ class AnalyzerImpl {
 
   final CommandLineOptions options;
   final int startTime;
-
-  /**
-   * True if the analyzer is running in batch mode.
-   */
-  final bool isBatch;
-
   ContentCache contentCache = new ContentCache();
 
   SourceFactory sourceFactory;
@@ -61,7 +55,7 @@ class AnalyzerImpl {
   final HashMap<Source, AnalysisErrorInfo> sourceErrorsMap =
       new HashMap<Source, AnalysisErrorInfo>();
 
-  AnalyzerImpl(String sourcePath, this.options, this.startTime, this.isBatch)
+  AnalyzerImpl(String sourcePath, this.options, this.startTime)
       : sourcePath = _normalizeSourcePath(sourcePath) {
     if (sdk == null) {
       sdk = new DirectoryBasedDartSdk(new JavaFile(options.dartSdkPath));
@@ -146,11 +140,10 @@ class AnalyzerImpl {
 
   void prepareAnalysisContext(JavaFile sourceFile, Source source) {
     List<UriResolver> resolvers = [
-      new CustomUriResolver(options.customUrlMappings),
-      new DartUriResolver(sdk),
-      new FileUriResolver()
-    ];
-    // maybe add package resolver
+        new CustomUriResolver(options.customUrlMappings),
+        new DartUriResolver(sdk),
+        new FileUriResolver()];
+    // may be add package resolver
     {
       JavaFile packageDirectory;
       if (options.packageRootPath != null) {
@@ -163,8 +156,10 @@ class AnalyzerImpl {
             PhysicalResourceProvider.INSTANCE.getResource('.'));
         Map<String, List<Folder>> packageMap = packageMapInfo.packageMap;
         if (packageMap != null) {
-          resolvers.add(new PackageMapUriResolver(
-              PhysicalResourceProvider.INSTANCE, packageMap));
+          resolvers.add(
+              new PackageMapUriResolver(
+                  PhysicalResourceProvider.INSTANCE,
+                  packageMap));
         }
       }
     }
@@ -185,10 +180,6 @@ class AnalyzerImpl {
     AnalysisOptionsImpl contextOptions = new AnalysisOptionsImpl();
     contextOptions.cacheSize = _MAX_CACHE_SIZE;
     contextOptions.hint = !options.disableHints;
-    contextOptions.analyzeFunctionBodiesPredicate =
-        _analyzeFunctionBodiesPredicate;
-    contextOptions.generateImplicitErrors = options.showPackageWarnings;
-    contextOptions.generateSdkErrors = options.showSdkWarnings;
     context.analysisOptions = contextOptions;
 
     // Create and add a ChangeSet
@@ -266,26 +257,6 @@ class AnalyzerImpl {
     });
   }
 
-  bool _analyzeFunctionBodiesPredicate(Source source) {
-    // TODO(paulberry): This function will need to be updated when we add the
-    // ability to suppress errors, warnings, and hints for files reached via
-    // custom URI's using the "--url-mapping" flag.
-    if (source.uri.scheme == 'dart') {
-      if (isBatch) {
-        // When running in batch mode, the SDK files are cached from one
-        // analysis run to the next.  So we need to parse function bodies even
-        // if the user hasn't asked for errors/warnings from the SDK, since
-        // they might ask for errors/warnings from the SDK in the future.
-        return true;
-      }
-      return options.showSdkWarnings;
-    }
-    if (source.uri.scheme == 'package') {
-      return options.showPackageWarnings;
-    }
-    return true;
-  }
-
   /// The sync version of analysis.
   ErrorSeverity _analyzeSync(int printMode) {
     // don't try to analyze parts
@@ -320,7 +291,7 @@ class AnalyzerImpl {
       return false;
     }
     if (computeSeverity(error, options.enableTypeChecks) ==
-            ErrorSeverity.INFO &&
+        ErrorSeverity.INFO &&
         options.disableHints) {
       return false;
     }
@@ -377,8 +348,8 @@ class AnalyzerImpl {
    * [enableTypeChecks] is false, then de-escalate checked-mode compile time
    * errors to a severity of [ErrorSeverity.INFO].
    */
-  static ErrorSeverity computeSeverity(
-      AnalysisError error, bool enableTypeChecks) {
+  static ErrorSeverity computeSeverity(AnalysisError error,
+      bool enableTypeChecks) {
     if (!enableTypeChecks &&
         error.errorCode.type == ErrorType.CHECKED_MODE_COMPILE_TIME_ERROR) {
       return ErrorSeverity.INFO;

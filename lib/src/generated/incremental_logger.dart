@@ -4,6 +4,7 @@
 
 library engine.incremental_logger;
 
+
 /**
  * The shared instance of [Logger] used by several incremental resolution
  * classes. It is initialized externally by the Analysis Engine client.
@@ -19,6 +20,7 @@ final Logger NULL_LOGGER = new _NullLogger();
  * An instance of [Logger] that uses `print` for output.
  */
 final Logger PRINT_LOGGER = new StringSinkLogger(new _PrintStringSink());
+
 
 /**
  * A simple hierarchical logger.
@@ -45,6 +47,7 @@ abstract class Logger {
   LoggingTimer startTimer();
 }
 
+
 /**
  * The handle of a timer.
  */
@@ -64,6 +67,7 @@ class LoggingTimer {
     _logger.log('$message in ${_stopwatch.elapsedMilliseconds} ms');
   }
 }
+
 
 /**
  * A [Logger] that writes to a [StringSink].
@@ -126,6 +130,7 @@ class StringSinkLogger implements Logger {
   }
 }
 
+
 class _LoggerSection {
   final DateTime start = new DateTime.now();
   final String indent;
@@ -133,24 +138,29 @@ class _LoggerSection {
   _LoggerSection(this.indent, this.name);
 }
 
+
 /**
  * A [Logger] that does nothing.
  */
 class _NullLogger implements Logger {
   @override
-  void enter(String name) {}
+  void enter(String name) {
+  }
 
   @override
-  void exit() {}
+  void exit() {
+  }
 
   @override
-  void log(Object obj) {}
+  void log(Object obj) {
+  }
 
   @override
   LoggingTimer startTimer() {
     return new LoggingTimer(this);
   }
 }
+
 
 /**
  * A [StringSink] implementation that uses `print`.

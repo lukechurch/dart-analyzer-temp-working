@@ -71,8 +71,8 @@ class PubPackageMapProvider implements PackageMapProvider {
     if (result == null || result.exitCode != 0) {
       String exitCode =
           result != null ? 'exit code ${result.exitCode}' : 'null';
-      AnalysisEngine.instance.logger
-          .logInformation("pub $PUB_LIST_COMMAND failed: $exitCode");
+      AnalysisEngine.instance.logger.logInformation(
+          "pub $PUB_LIST_COMMAND failed: $exitCode");
       return computePackageMapError(folder);
     }
     try {
@@ -96,8 +96,7 @@ class PubPackageMapProvider implements PackageMapProvider {
     // Unfortunately, "pub list-package-dirs" doesn't tell us dependencies when
     // an error occurs, so just assume there is one dependency, "pubspec.lock".
     List<String> dependencies = <String>[
-      resourceProvider.pathContext.join(folder.path, PUBSPEC_LOCK_NAME)
-    ];
+        resourceProvider.pathContext.join(folder.path, PUBSPEC_LOCK_NAME)];
     return new PackageMapInfo(null, dependencies.toSet());
   }
 
@@ -123,7 +122,7 @@ class PubPackageMapProvider implements PackageMapProvider {
       List<Folder> folders = <Folder>[];
       for (var path in paths) {
         if (path is String) {
-          Resource resource = folder.getChildAssumingFolder(path);
+          Resource resource = folder.getChild(path);
           if (resource is Folder) {
             folders.add(resource);
           }
@@ -156,8 +155,9 @@ class PubPackageMapProvider implements PackageMapProvider {
    * Run pub list to determine the packages and input files.
    */
   io.ProcessResult _runPubListDefault(Folder folder) {
-    return io.Process.runSync(sdk.pubExecutable.getAbsolutePath(), [
-      PUB_LIST_COMMAND
-    ], workingDirectory: folder.path);
+    return io.Process.runSync(
+        sdk.pubExecutable.getAbsolutePath(),
+        [PUB_LIST_COMMAND],
+        workingDirectory: folder.path);
   }
 }

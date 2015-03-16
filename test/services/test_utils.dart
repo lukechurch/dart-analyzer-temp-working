@@ -12,9 +12,11 @@ import 'package:analyzer/src/generated/scanner.dart';
 import 'package:analyzer/src/generated/source.dart';
 import 'package:unittest/unittest.dart';
 
+
 /// Parse the given [source] as a statement and assert, if provided, that
 /// exactly a given set of [expectedErrorCodes] are encountered.
 Statement parseStatement(String source, [List<ErrorCode> expectedErrorCodes]) {
+
   var listener = new _GatheringErrorListener();
   var reader = new CharSequenceReader(source);
   var scanner = new Scanner(null, reader, listener);
@@ -32,6 +34,7 @@ Statement parseStatement(String source, [List<ErrorCode> expectedErrorCodes]) {
   return statement;
 }
 
+
 Set<_MapEntry> _getMapEntrySet(Map m) {
   var result = new Set();
   m.forEach((k, v) {
@@ -40,7 +43,9 @@ Set<_MapEntry> _getMapEntrySet(Map m) {
   return result;
 }
 
+
 _unsupported() => throw new _UnsupportedOperationException();
+
 
 /// Instances of the class [_GatheringErrorListener] implement an error listener
 /// that collects all of the errors passed to it for later examination.
@@ -138,16 +143,20 @@ class _GatheringErrorListener implements AnalysisErrorListener {
     }
   }
 
+
   void onError(AnalysisError error) {
     _errors.add(error);
   }
+
 
   /// Sets the line information associated with the given source to the given
   /// information.
   void setLineInfo(Source source, List<int> lineStarts) {
     _lineInfoMap[source] = new LineInfo(lineStarts);
   }
+
 }
+
 
 class _MapEntry<K, V> {
   K _key;
@@ -158,6 +167,7 @@ class _MapEntry<K, V> {
 }
 
 class _TestSource extends Source {
+
   TimestampedData<String> get contents => _unsupported();
 
   AnalysisContext get context => _unsupported();
@@ -186,6 +196,7 @@ class _TestSource extends Source {
 
   Uri resolveRelativeUri(Uri uri) => _unsupported();
 }
+
 
 class _UnsupportedOperationException implements Exception {
   String toString() => 'UnsupportedOperationException';

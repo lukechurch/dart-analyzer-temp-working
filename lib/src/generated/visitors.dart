@@ -9,6 +9,7 @@ import 'package:analyzer/src/generated/ast.dart';
 /// An [AstVisitor] that delegates calls to visit methods to all [delegates]
 /// before calling [visitChildren].
 class DelegatingAstVisitor<T> implements AstVisitor<T> {
+
   Iterable<AstVisitor<T>> _delegates;
   DelegatingAstVisitor(this._delegates);
 
@@ -154,16 +155,16 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
 
   @override
   T visitConstructorDeclaration(ConstructorDeclaration node) {
-    _delegates
-        .forEach((delegate) => delegate.visitConstructorDeclaration(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitConstructorDeclaration(node));
     node.visitChildren(this);
     return null;
   }
 
   @override
   T visitConstructorFieldInitializer(ConstructorFieldInitializer node) {
-    _delegates
-        .forEach((delegate) => delegate.visitConstructorFieldInitializer(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitConstructorFieldInitializer(node));
     node.visitChildren(this);
     return null;
   }
@@ -191,8 +192,8 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
 
   @override
   T visitDefaultFormalParameter(DefaultFormalParameter node) {
-    _delegates
-        .forEach((delegate) => delegate.visitDefaultFormalParameter(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitDefaultFormalParameter(node));
     node.visitChildren(this);
     return null;
   }
@@ -227,8 +228,8 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
 
   @override
   T visitEnumConstantDeclaration(EnumConstantDeclaration node) {
-    _delegates
-        .forEach((delegate) => delegate.visitEnumConstantDeclaration(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitEnumConstantDeclaration(node));
     node.visitChildren(this);
     return null;
   }
@@ -249,8 +250,8 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
 
   @override
   T visitExpressionFunctionBody(ExpressionFunctionBody node) {
-    _delegates
-        .forEach((delegate) => delegate.visitExpressionFunctionBody(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitExpressionFunctionBody(node));
     node.visitChildren(this);
     return null;
   }
@@ -385,8 +386,8 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
 
   @override
   T visitInstanceCreationExpression(InstanceCreationExpression node) {
-    _delegates
-        .forEach((delegate) => delegate.visitInstanceCreationExpression(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitInstanceCreationExpression(node));
     node.visitChildren(this);
     return null;
   }
@@ -400,8 +401,8 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
 
   @override
   T visitInterpolationExpression(InterpolationExpression node) {
-    _delegates
-        .forEach((delegate) => delegate.visitInterpolationExpression(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitInterpolationExpression(node));
     node.visitChildren(this);
     return null;
   }
@@ -512,8 +513,8 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
 
   @override
   T visitParenthesizedExpression(ParenthesizedExpression node) {
-    _delegates
-        .forEach((delegate) => delegate.visitParenthesizedExpression(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitParenthesizedExpression(node));
     node.visitChildren(this);
     return null;
   }
@@ -560,8 +561,8 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
   }
 
   @override
-  T visitRedirectingConstructorInvocation(
-      RedirectingConstructorInvocation node) {
+  T
+      visitRedirectingConstructorInvocation(RedirectingConstructorInvocation node) {
     _delegates.forEach(
         (delegate) => delegate.visitRedirectingConstructorInvocation(node));
     node.visitChildren(this);
@@ -626,8 +627,8 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
 
   @override
   T visitSuperConstructorInvocation(SuperConstructorInvocation node) {
-    _delegates
-        .forEach((delegate) => delegate.visitSuperConstructorInvocation(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitSuperConstructorInvocation(node));
     node.visitChildren(this);
     return null;
   }
@@ -683,8 +684,8 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
 
   @override
   T visitTopLevelVariableDeclaration(TopLevelVariableDeclaration node) {
-    _delegates
-        .forEach((delegate) => delegate.visitTopLevelVariableDeclaration(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitTopLevelVariableDeclaration(node));
     node.visitChildren(this);
     return null;
   }
@@ -733,8 +734,8 @@ class DelegatingAstVisitor<T> implements AstVisitor<T> {
 
   @override
   T visitVariableDeclarationList(VariableDeclarationList node) {
-    _delegates
-        .forEach((delegate) => delegate.visitVariableDeclarationList(node));
+    _delegates.forEach(
+        (delegate) => delegate.visitVariableDeclarationList(node));
     node.visitChildren(this);
     return null;
   }
