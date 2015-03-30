@@ -11,8 +11,8 @@ import 'java_engine.dart';
 import 'source.dart';
 
 /**
- * A `BeginToken` is the opening half of a grouping pair of tokens. This is used
- * for curly brackets ('{'), parentheses ('('), and square brackets ('[').
+ * The opening half of a grouping pair of tokens. This is used for curly
+ * brackets ('{'), parentheses ('('), and square brackets ('[').
  */
 class BeginToken extends Token {
   /**
@@ -36,7 +36,7 @@ class BeginToken extends Token {
 }
 
 /**
- * A `BeginTokenWithComment` is a begin token that is preceded by comments.
+ * A begin token that is preceded by comments.
  */
 class BeginTokenWithComment extends BeginToken {
   /**
@@ -77,8 +77,8 @@ class BeginTokenWithComment extends BeginToken {
 }
 
 /**
- * A `CharacterRangeReader` is a [CharacterReader] that reads a range of
- * characters from another character reader.
+ * A [CharacterReader] that reads a range of characters from another character
+ * reader.
  */
 class CharacterRangeReader extends CharacterReader {
   /**
@@ -129,8 +129,7 @@ class CharacterRangeReader extends CharacterReader {
 }
 
 /**
- * A `CharacterReader` is used by the scanner to read the characters to be
- * scanned.
+ * An object used by the scanner to read the characters to be scanned.
  */
 abstract class CharacterReader {
   /**
@@ -171,8 +170,7 @@ abstract class CharacterReader {
 }
 
 /**
- * A `CharSequenceReader` is a [CharacterReader] that reads characters from a
- * character sequence.
+ * A [CharacterReader] that reads characters from a character sequence.
  */
 class CharSequenceReader implements CharacterReader {
   /**
@@ -229,7 +227,7 @@ class CharSequenceReader implements CharacterReader {
 }
 
 /**
- * A `CommentToken` is a token representing a comment.
+ * A token representing a comment.
  */
 class CommentToken extends StringToken {
   /**
@@ -271,8 +269,7 @@ class DocumentationCommentToken extends CommentToken {
 }
 
 /**
- * The enumeration `Keyword` defines the keywords in the Dart programming
- * language.
+ * The keywords in the Dart programming language.
  */
 class Keyword {
   static const Keyword ASSERT = const Keyword('ASSERT', "assert");
@@ -375,55 +372,56 @@ class Keyword {
   static const Keyword TYPEDEF = const Keyword('TYPEDEF', "typedef", true);
 
   static const List<Keyword> values = const [
-      ASSERT,
-      BREAK,
-      CASE,
-      CATCH,
-      CLASS,
-      CONST,
-      CONTINUE,
-      DEFAULT,
-      DO,
-      ELSE,
-      ENUM,
-      EXTENDS,
-      FALSE,
-      FINAL,
-      FINALLY,
-      FOR,
-      IF,
-      IN,
-      IS,
-      NEW,
-      NULL,
-      RETHROW,
-      RETURN,
-      SUPER,
-      SWITCH,
-      THIS,
-      THROW,
-      TRUE,
-      TRY,
-      VAR,
-      VOID,
-      WHILE,
-      WITH,
-      ABSTRACT,
-      AS,
-      DEFERRED,
-      DYNAMIC,
-      EXPORT,
-      EXTERNAL,
-      FACTORY,
-      GET,
-      IMPLEMENTS,
-      IMPORT,
-      LIBRARY,
-      OPERATOR,
-      PART,
-      SET,
-      STATIC,
-      TYPEDEF];
+    ASSERT,
+    BREAK,
+    CASE,
+    CATCH,
+    CLASS,
+    CONST,
+    CONTINUE,
+    DEFAULT,
+    DO,
+    ELSE,
+    ENUM,
+    EXTENDS,
+    FALSE,
+    FINAL,
+    FINALLY,
+    FOR,
+    IF,
+    IN,
+    IS,
+    NEW,
+    NULL,
+    RETHROW,
+    RETURN,
+    SUPER,
+    SWITCH,
+    THIS,
+    THROW,
+    TRUE,
+    TRY,
+    VAR,
+    VOID,
+    WHILE,
+    WITH,
+    ABSTRACT,
+    AS,
+    DEFERRED,
+    DYNAMIC,
+    EXPORT,
+    EXTERNAL,
+    FACTORY,
+    GET,
+    IMPLEMENTS,
+    IMPORT,
+    LIBRARY,
+    OPERATOR,
+    PART,
+    SET,
+    STATIC,
+    TYPEDEF
+  ];
 
   /**
    * A table mapping the lexemes of keywords to the corresponding keyword.
@@ -470,7 +468,7 @@ class Keyword {
 }
 
 /**
- * A `KeywordState` is a state in a state machine used to scan keywords.
+ * A state in a state machine used to scan keywords.
  */
 class KeywordState {
   /**
@@ -522,19 +520,9 @@ class KeywordState {
    * the subset of strings in the given array of [strings] starting at the given
    * [offset] and having the given [length]. All of these strings have a common
    * prefix and the next character is at the given [start] index.
-   *
-   * [start] the index of the character in the strings used to transition to a
-   * new state
-   * [strings] an array containing all of the strings that will be recognized by
-   * the state machine
-   * [offset] the offset of the first string in the array that has the prefix
-   * that is assumed to have been recognized by the time we reach the state
-   * being built
-   * [length] the number of strings in the array that pass through the state
-   * being built
    */
-  static KeywordState _computeKeywordStateTable(int start, List<String> strings,
-      int offset, int length) {
+  static KeywordState _computeKeywordStateTable(
+      int start, List<String> strings, int offset, int length) {
     List<KeywordState> result = new List<KeywordState>(26);
     assert(length != 0);
     int chunk = 0x0;
@@ -548,8 +536,8 @@ class KeywordState {
         int c = strings[i].codeUnitAt(start);
         if (chunk != c) {
           if (chunkStart != -1) {
-            result[chunk - 0x61] =
-                _computeKeywordStateTable(start + 1, strings, chunkStart, i - chunkStart);
+            result[chunk - 0x61] = _computeKeywordStateTable(
+                start + 1, strings, chunkStart, i - chunkStart);
           }
           chunkStart = i;
           chunk = c;
@@ -558,12 +546,8 @@ class KeywordState {
     }
     if (chunkStart != -1) {
       assert(result[chunk - 0x61] == null);
-      result[chunk -
-          0x61] = _computeKeywordStateTable(
-              start + 1,
-              strings,
-              chunkStart,
-              offset + length - chunkStart);
+      result[chunk - 0x61] = _computeKeywordStateTable(
+          start + 1, strings, chunkStart, offset + length - chunkStart);
     } else {
       assert(length == 1);
       return new KeywordState(_EMPTY_TABLE, strings[offset]);
@@ -590,7 +574,7 @@ class KeywordState {
 }
 
 /**
- * A `KeywordToken` is a keyword in the language.
+ * A token representing a keyword in the language.
  */
 class KeywordToken extends Token {
   /**
@@ -615,7 +599,7 @@ class KeywordToken extends Token {
 }
 
 /**
- * A `KeywordTokenWithComment` is a keyword token that is preceded by comments.
+ * A keyword token that is preceded by comments.
  */
 class KeywordTokenWithComment extends KeywordToken {
   /**
@@ -651,8 +635,8 @@ class KeywordTokenWithComment extends KeywordToken {
   }
 
   @override
-  Token copy() =>
-      new KeywordTokenWithComment(keyword, offset, copyComments(precedingComments));
+  Token copy() => new KeywordTokenWithComment(
+      keyword, offset, copyComments(precedingComments));
 }
 
 /**
@@ -739,6 +723,12 @@ class Scanner {
   bool _hasUnmatchedGroups = false;
 
   /**
+   * A flag indicating whether null-aware operators ('?.', '??', and '??=')
+   * should be tokenized.
+   */
+  bool enableNullAwareOperators = false;
+
+  /**
    * Initialize a newly created scanner to scan characters from the given
    * [source]. The given character [_reader] will be used to read the characters
    * in the source. The given [_errorListener] will be informed of any errors
@@ -793,142 +783,179 @@ class Scanner {
   int bigSwitch(int next) {
     _beginToken();
     if (next == 0xD) {
+      // '\r'
       next = _reader.advance();
       if (next == 0xA) {
+        // '\n'
         next = _reader.advance();
       }
       recordStartOfLine();
       return next;
     } else if (next == 0xA) {
+      // '\n'
       next = _reader.advance();
       recordStartOfLine();
       return next;
     } else if (next == 0x9 || next == 0x20) {
+      // '\t' || ' '
       return _reader.advance();
     }
     if (next == 0x72) {
+      // 'r'
       int peek = _reader.peek();
       if (peek == 0x22 || peek == 0x27) {
+        // '"' || "'"
         int start = _reader.offset;
         return _tokenizeString(_reader.advance(), start, true);
       }
     }
     if (0x61 <= next && next <= 0x7A) {
+      // 'a'-'z'
       return _tokenizeKeywordOrIdentifier(next, true);
     }
     if ((0x41 <= next && next <= 0x5A) || next == 0x5F || next == 0x24) {
+      // 'A'-'Z' || '_' || '$'
       return _tokenizeIdentifier(next, _reader.offset, true);
     }
     if (next == 0x3C) {
+      // '<'
       return _tokenizeLessThan(next);
     }
     if (next == 0x3E) {
+      // '>'
       return _tokenizeGreaterThan(next);
     }
     if (next == 0x3D) {
+      // '='
       return _tokenizeEquals(next);
     }
     if (next == 0x21) {
+      // '!'
       return _tokenizeExclamation(next);
     }
     if (next == 0x2B) {
+      // '+'
       return _tokenizePlus(next);
     }
     if (next == 0x2D) {
+      // '-'
       return _tokenizeMinus(next);
     }
     if (next == 0x2A) {
+      // '*'
       return _tokenizeMultiply(next);
     }
     if (next == 0x25) {
+      // '%'
       return _tokenizePercent(next);
     }
     if (next == 0x26) {
+      // '&'
       return _tokenizeAmpersand(next);
     }
     if (next == 0x7C) {
+      // '|'
       return _tokenizeBar(next);
     }
     if (next == 0x5E) {
+      // '^'
       return _tokenizeCaret(next);
     }
     if (next == 0x5B) {
+      // '['
       return _tokenizeOpenSquareBracket(next);
     }
     if (next == 0x7E) {
+      // '~'
       return _tokenizeTilde(next);
     }
     if (next == 0x5C) {
+      // '\\'
       _appendTokenOfType(TokenType.BACKSLASH);
       return _reader.advance();
     }
     if (next == 0x23) {
+      // '#'
       return _tokenizeTag(next);
     }
     if (next == 0x28) {
+      // '('
       _appendBeginToken(TokenType.OPEN_PAREN);
       return _reader.advance();
     }
     if (next == 0x29) {
+      // ')'
       _appendEndToken(TokenType.CLOSE_PAREN, TokenType.OPEN_PAREN);
       return _reader.advance();
     }
     if (next == 0x2C) {
+      // ','
       _appendTokenOfType(TokenType.COMMA);
       return _reader.advance();
     }
     if (next == 0x3A) {
+      // ':'
       _appendTokenOfType(TokenType.COLON);
       return _reader.advance();
     }
     if (next == 0x3B) {
+      // ';'
       _appendTokenOfType(TokenType.SEMICOLON);
       return _reader.advance();
     }
     if (next == 0x3F) {
-      _appendTokenOfType(TokenType.QUESTION);
-      return _reader.advance();
+      // '?'
+      return _tokenizeQuestion();
     }
     if (next == 0x5D) {
+      // ']'
       _appendEndToken(
-          TokenType.CLOSE_SQUARE_BRACKET,
-          TokenType.OPEN_SQUARE_BRACKET);
+          TokenType.CLOSE_SQUARE_BRACKET, TokenType.OPEN_SQUARE_BRACKET);
       return _reader.advance();
     }
     if (next == 0x60) {
+      // '`'
       _appendTokenOfType(TokenType.BACKPING);
       return _reader.advance();
     }
     if (next == 0x7B) {
+      // '{'
       _appendBeginToken(TokenType.OPEN_CURLY_BRACKET);
       return _reader.advance();
     }
     if (next == 0x7D) {
+      // '}'
       _appendEndToken(
-          TokenType.CLOSE_CURLY_BRACKET,
-          TokenType.OPEN_CURLY_BRACKET);
+          TokenType.CLOSE_CURLY_BRACKET, TokenType.OPEN_CURLY_BRACKET);
       return _reader.advance();
     }
     if (next == 0x2F) {
+      // '/'
       return _tokenizeSlashOrComment(next);
     }
     if (next == 0x40) {
+      // '@'
       _appendTokenOfType(TokenType.AT);
       return _reader.advance();
     }
     if (next == 0x22 || next == 0x27) {
+      // '"' || "'"
       return _tokenizeString(next, _reader.offset, false);
     }
     if (next == 0x2E) {
+      // '.'
       return _tokenizeDotOrNumber(next);
     }
     if (next == 0x30) {
+      // '0'
       return _tokenizeHexOrNumber(next);
     }
     if (0x31 <= next && next <= 0x39) {
+      // '1'-'9'
       return _tokenizeNumber(next);
     }
     if (next == -1) {
+      // EOF
       return -1;
     }
     _reportError(ScannerErrorCode.ILLEGAL_CHARACTER, [next]);
@@ -944,17 +971,13 @@ class Scanner {
 
   /**
    * Record that the source begins on the given [line] and [column] at the
-   * current offset as given by the reader. The line starts for lines before the
-   * given line will not be correct.
+   * current offset as given by the reader. Both the line and the column are
+   * one-based indexes. The line starts for lines before the given line will not
+   * be correct.
    *
    * This method must be invoked at most one time and must be invoked before
    * scanning begins. The values provided must be sensible. The results are
    * undefined if these conditions are violated.
-   *
-   * [line] the one-based index of the line containing the first character of
-   * the source
-   * [column] the one-based index of the column in which the first character of
-   * the source occurs
    */
   void setSourceStart(int line, int column) {
     int offset = _reader.offset;
@@ -1038,8 +1061,8 @@ class Scanner {
     if (_firstComment == null) {
       eofToken = new Token(TokenType.EOF, _reader.offset + 1);
     } else {
-      eofToken =
-          new TokenWithComment(TokenType.EOF, _reader.offset + 1, _firstComment);
+      eofToken = new TokenWithComment(
+          TokenType.EOF, _reader.offset + 1, _firstComment);
       _firstComment = null;
       _lastComment = null;
     }
@@ -1079,8 +1102,8 @@ class Scanner {
     if (_firstComment == null) {
       _tail = _tail.setNext(new StringToken(type, value, _tokenStart + offset));
     } else {
-      _tail = _tail.setNext(
-          new StringTokenWithComment(type, value, _tokenStart + offset, _firstComment));
+      _tail = _tail.setNext(new StringTokenWithComment(
+          type, value, _tokenStart + offset, _firstComment));
       _firstComment = null;
       _lastComment = null;
     }
@@ -1135,14 +1158,13 @@ class Scanner {
   }
 
   /**
-   * Report an error at the current offset.
-   *
-   * [errorCode] the error code indicating the nature of the error
-   * [arguments] any arguments needed to complete the error message
+   * Report an error at the current offset. The [errorCode] is the error code
+   * indicating the nature of the error. The [arguments] are any arguments
+   * needed to complete the error message
    */
   void _reportError(ScannerErrorCode errorCode, [List<Object> arguments]) {
-    _errorListener.onError(
-        new AnalysisError.con2(source, _reader.offset, 1, errorCode, arguments));
+    _errorListener.onError(new AnalysisError.con2(
+        source, _reader.offset, 1, errorCode, arguments));
   }
 
   int _select(int choice, TokenType yesType, TokenType noType) {
@@ -1156,8 +1178,8 @@ class Scanner {
     }
   }
 
-  int _selectWithOffset(int choice, TokenType yesType, TokenType noType,
-      int offset) {
+  int _selectWithOffset(
+      int choice, TokenType yesType, TokenType noType, int offset) {
     int next = _reader.advance();
     if (next == choice) {
       _appendTokenOfTypeWithOffset(yesType, offset);
@@ -1208,9 +1230,7 @@ class Scanner {
       return _tokenizeFractionPart(next, start);
     } else if (0x2E == next) {
       return _select(
-          0x2E,
-          TokenType.PERIOD_PERIOD_PERIOD,
-          TokenType.PERIOD_PERIOD);
+          0x2E, TokenType.PERIOD_PERIOD_PERIOD, TokenType.PERIOD_PERIOD);
     } else {
       _appendTokenOfType(TokenType.PERIOD);
       return next;
@@ -1280,18 +1300,14 @@ class Scanner {
     if (!hasDigit) {
       _appendStringToken(TokenType.INT, _reader.getString(start, -2));
       if (0x2E == next) {
-        return _selectWithOffset(
-            0x2E,
-            TokenType.PERIOD_PERIOD_PERIOD,
-            TokenType.PERIOD_PERIOD,
-            _reader.offset - 1);
+        return _selectWithOffset(0x2E, TokenType.PERIOD_PERIOD_PERIOD,
+            TokenType.PERIOD_PERIOD, _reader.offset - 1);
       }
       _appendTokenOfTypeWithOffset(TokenType.PERIOD, _reader.offset - 1);
       return bigSwitch(next);
     }
     _appendStringToken(
-        TokenType.DOUBLE,
-        _reader.getString(start, next < 0 ? 0 : -1));
+        TokenType.DOUBLE, _reader.getString(start, next < 0 ? 0 : -1));
     return next;
   }
 
@@ -1330,8 +1346,7 @@ class Scanner {
           _reportError(ScannerErrorCode.MISSING_HEX_DIGIT);
         }
         _appendStringToken(
-            TokenType.HEXADECIMAL,
-            _reader.getString(start, next < 0 ? 0 : -1));
+            TokenType.HEXADECIMAL, _reader.getString(start, next < 0 ? 0 : -1));
         return next;
       }
     }
@@ -1355,8 +1370,7 @@ class Scanner {
       next = _reader.advance();
     }
     _appendStringToken(
-        TokenType.IDENTIFIER,
-        _reader.getString(start, next < 0 ? 0 : -1));
+        TokenType.IDENTIFIER, _reader.getString(start, next < 0 ? 0 : -1));
     return next;
   }
 
@@ -1376,14 +1390,12 @@ class Scanner {
         } else if (begin.type == TokenType.OPEN_CURLY_BRACKET) {
           _beginToken();
           _appendEndToken(
-              TokenType.CLOSE_CURLY_BRACKET,
-              TokenType.OPEN_CURLY_BRACKET);
+              TokenType.CLOSE_CURLY_BRACKET, TokenType.OPEN_CURLY_BRACKET);
           next = _reader.advance();
           _beginToken();
         } else if (begin.type == TokenType.STRING_INTERPOLATION_EXPRESSION) {
           _beginToken();
-          _appendEndToken(
-              TokenType.CLOSE_CURLY_BRACKET,
+          _appendEndToken(TokenType.CLOSE_CURLY_BRACKET,
               TokenType.STRING_INTERPOLATION_EXPRESSION);
           next = _reader.advance();
           _beginToken();
@@ -1398,9 +1410,7 @@ class Scanner {
 
   int _tokenizeInterpolatedIdentifier(int next, int start) {
     _appendStringTokenWithOffset(
-        TokenType.STRING_INTERPOLATION_IDENTIFIER,
-        "\$",
-        0);
+        TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 0);
     if ((0x41 <= next && next <= 0x5A) ||
         (0x61 <= next && next <= 0x7A) ||
         next == 0x5F) {
@@ -1470,16 +1480,14 @@ class Scanner {
       if (-1 == next) {
         _reportError(ScannerErrorCode.UNTERMINATED_MULTI_LINE_COMMENT);
         _appendCommentToken(
-            TokenType.MULTI_LINE_COMMENT,
-            _reader.getString(_tokenStart, 0));
+            TokenType.MULTI_LINE_COMMENT, _reader.getString(_tokenStart, 0));
         return next;
       } else if (0x2A == next) {
         next = _reader.advance();
         if (0x2F == next) {
           --nesting;
           if (0 == nesting) {
-            _appendCommentToken(
-                TokenType.MULTI_LINE_COMMENT,
+            _appendCommentToken(TokenType.MULTI_LINE_COMMENT,
                 _reader.getString(_tokenStart, 0));
             return _reader.advance();
           } else {
@@ -1511,7 +1519,6 @@ class Scanner {
     int next = _reader.advance();
     outer: while (next != -1) {
       while (next != quoteChar) {
-        next = _reader.advance();
         if (next == -1) {
           break outer;
         } else if (next == 0xD) {
@@ -1521,7 +1528,9 @@ class Scanner {
           }
           recordStartOfLine();
         } else if (next == 0xA) {
+          next = _reader.advance();
           recordStartOfLine();
+        } else {
           next = _reader.advance();
         }
       }
@@ -1617,8 +1626,7 @@ class Scanner {
         return _tokenizeFractionPart(next, start);
       } else {
         _appendStringToken(
-            TokenType.INT,
-            _reader.getString(start, next < 0 ? 0 : -1));
+            TokenType.INT, _reader.getString(start, next < 0 ? 0 : -1));
         return next;
       }
     }
@@ -1653,18 +1661,40 @@ class Scanner {
     }
   }
 
+  int _tokenizeQuestion() {
+    // ? ?. ?? ??=
+    int next = _reader.advance();
+    if (enableNullAwareOperators && next == 0x2E) {
+      // '.'
+      _appendTokenOfType(TokenType.QUESTION_PERIOD);
+      return _reader.advance();
+    } else if (enableNullAwareOperators && next == 0x3F) {
+      // '?'
+      next = _reader.advance();
+      if (next == 0x3D) {
+        // '='
+        _appendTokenOfType(TokenType.QUESTION_QUESTION_EQ);
+        return _reader.advance();
+      } else {
+        _appendTokenOfType(TokenType.QUESTION_QUESTION);
+        return next;
+      }
+    } else {
+      _appendTokenOfType(TokenType.QUESTION);
+      return next;
+    }
+  }
+
   int _tokenizeSingleLineComment(int next) {
     while (true) {
       next = _reader.advance();
       if (-1 == next) {
         _appendCommentToken(
-            TokenType.SINGLE_LINE_COMMENT,
-            _reader.getString(_tokenStart, 0));
+            TokenType.SINGLE_LINE_COMMENT, _reader.getString(_tokenStart, 0));
         return next;
       } else if (0xA == next || 0xD == next) {
         _appendCommentToken(
-            TokenType.SINGLE_LINE_COMMENT,
-            _reader.getString(_tokenStart, -1));
+            TokenType.SINGLE_LINE_COMMENT, _reader.getString(_tokenStart, -1));
         return next;
       }
     }
@@ -1770,8 +1800,7 @@ class Scanner {
           next = _reader.advance();
         } while (next != 0xA && next != 0xD && next > 0);
         _appendStringToken(
-            TokenType.SCRIPT_TAG,
-            _reader.getString(_tokenStart, 0));
+            TokenType.SCRIPT_TAG, _reader.getString(_tokenStart, 0));
         return next;
       }
     }
@@ -1800,8 +1829,7 @@ class Scanner {
 }
 
 /**
- * The enumeration `ScannerErrorCode` defines the error codes used for errors
- * detected by the scanner.
+ * The error codes used for errors detected by the scanner.
  */
 class ScannerErrorCode extends ErrorCode {
   static const ScannerErrorCode ILLEGAL_CHARACTER =
@@ -1816,18 +1844,16 @@ class ScannerErrorCode extends ErrorCode {
   static const ScannerErrorCode MISSING_QUOTE =
       const ScannerErrorCode('MISSING_QUOTE', "Expected quote (' or \")");
 
-  static const ScannerErrorCode UNABLE_GET_CONTENT =
-      const ScannerErrorCode('UNABLE_GET_CONTENT', "Unable to get content: {0}");
+  static const ScannerErrorCode UNABLE_GET_CONTENT = const ScannerErrorCode(
+      'UNABLE_GET_CONTENT', "Unable to get content: {0}");
 
   static const ScannerErrorCode UNTERMINATED_MULTI_LINE_COMMENT =
       const ScannerErrorCode(
-          'UNTERMINATED_MULTI_LINE_COMMENT',
-          "Unterminated multi-line comment");
+          'UNTERMINATED_MULTI_LINE_COMMENT', "Unterminated multi-line comment");
 
   static const ScannerErrorCode UNTERMINATED_STRING_LITERAL =
       const ScannerErrorCode(
-          'UNTERMINATED_STRING_LITERAL',
-          "Unterminated string literal");
+          'UNTERMINATED_STRING_LITERAL', "Unterminated string literal");
 
   /**
    * Initialize a newly created error code to have the given [name]. The message
@@ -1846,7 +1872,7 @@ class ScannerErrorCode extends ErrorCode {
 }
 
 /**
- * A `StringToken` is a token whose value is independent of it's type.
+ * A token whose value is independent of it's type.
  */
 class StringToken extends Token {
   /**
@@ -1873,7 +1899,7 @@ class StringToken extends Token {
 }
 
 /**
- * A `StringTokenWithComment` is a string token that is preceded by comments.
+ * A string token that is preceded by comments.
  */
 class StringTokenWithComment extends StringToken {
   /**
@@ -1886,8 +1912,8 @@ class StringTokenWithComment extends StringToken {
    * [offset] and to be preceded by the comments reachable from the given
    * [comment].
    */
-  StringTokenWithComment(TokenType type, String value, int offset,
-      this._precedingComment)
+  StringTokenWithComment(
+      TokenType type, String value, int offset, this._precedingComment)
       : super(type, value, offset) {
     _setCommentParent(_precedingComment);
   }
@@ -1910,19 +1936,14 @@ class StringTokenWithComment extends StringToken {
   }
 
   @override
-  Token copy() =>
-      new StringTokenWithComment(
-          type,
-          lexeme,
-          offset,
-          copyComments(precedingComments));
+  Token copy() => new StringTokenWithComment(
+      type, lexeme, offset, copyComments(precedingComments));
 }
 
 /**
- * A `SubSequenceReader` is a [CharacterReader] that reads characters from a
- * character sequence, but adds a delta when reporting the current character
- * offset so that the character sequence can be a subsequence from a larger
- * sequence.
+ * A [CharacterReader] that reads characters from a character sequence, but adds
+ * a delta when reporting the current character offset so that the character
+ * sequence can be a subsequence from a larger sequence.
  */
 class SubSequenceReader extends CharSequenceReader {
   /**
@@ -1952,7 +1973,7 @@ class SubSequenceReader extends CharSequenceReader {
 }
 
 /**
- * A `SyntheticStringToken` is a token whose value is independent of it's type.
+ * A token whose value is independent of it's type.
  */
 class SyntheticStringToken extends StringToken {
   /**
@@ -1967,9 +1988,8 @@ class SyntheticStringToken extends StringToken {
 }
 
 /**
- * Instances of the class `Token` represent a token that was scanned from the
- * input. Each token knows which tokens preceed and follow it, acting as a link
- * in a doubly linked list of tokens.
+ * A token that was scanned from the input. Each token knows which tokens
+ * precede and follow it, acting as a link in a doubly linked list of tokens.
  */
 class Token {
   /**
@@ -2156,8 +2176,7 @@ class Token {
 }
 
 /**
- * The enumeration `TokenClass` represents classes (or groups) of tokens with a
- * similar use.
+ * The classes (or groups) of tokens with a similar use.
  */
 class TokenClass {
   /**
@@ -2170,7 +2189,7 @@ class TokenClass {
    * A value used to indicate that the token type is an additive operator.
    */
   static const TokenClass ADDITIVE_OPERATOR =
-      const TokenClass('ADDITIVE_OPERATOR', 12);
+      const TokenClass('ADDITIVE_OPERATOR', 13);
 
   /**
    * A value used to indicate that the token type is an assignment operator.
@@ -2182,19 +2201,19 @@ class TokenClass {
    * A value used to indicate that the token type is a bitwise-and operator.
    */
   static const TokenClass BITWISE_AND_OPERATOR =
-      const TokenClass('BITWISE_AND_OPERATOR', 10);
+      const TokenClass('BITWISE_AND_OPERATOR', 11);
 
   /**
    * A value used to indicate that the token type is a bitwise-or operator.
    */
   static const TokenClass BITWISE_OR_OPERATOR =
-      const TokenClass('BITWISE_OR_OPERATOR', 8);
+      const TokenClass('BITWISE_OR_OPERATOR', 9);
 
   /**
    * A value used to indicate that the token type is a bitwise-xor operator.
    */
   static const TokenClass BITWISE_XOR_OPERATOR =
-      const TokenClass('BITWISE_XOR_OPERATOR', 9);
+      const TokenClass('BITWISE_XOR_OPERATOR', 10);
 
   /**
    * A value used to indicate that the token type is a cascade operator.
@@ -2212,49 +2231,55 @@ class TokenClass {
    * A value used to indicate that the token type is an equality operator.
    */
   static const TokenClass EQUALITY_OPERATOR =
-      const TokenClass('EQUALITY_OPERATOR', 6);
+      const TokenClass('EQUALITY_OPERATOR', 7);
+
+  /**
+   * A value used to indicate that the token type is an if-null operator.
+   */
+  static const TokenClass IF_NULL_OPERATOR =
+      const TokenClass('IF_NULL_OPERATOR', 4);
 
   /**
    * A value used to indicate that the token type is a logical-and operator.
    */
   static const TokenClass LOGICAL_AND_OPERATOR =
-      const TokenClass('LOGICAL_AND_OPERATOR', 5);
+      const TokenClass('LOGICAL_AND_OPERATOR', 6);
 
   /**
    * A value used to indicate that the token type is a logical-or operator.
    */
   static const TokenClass LOGICAL_OR_OPERATOR =
-      const TokenClass('LOGICAL_OR_OPERATOR', 4);
+      const TokenClass('LOGICAL_OR_OPERATOR', 5);
 
   /**
    * A value used to indicate that the token type is a multiplicative operator.
    */
   static const TokenClass MULTIPLICATIVE_OPERATOR =
-      const TokenClass('MULTIPLICATIVE_OPERATOR', 13);
+      const TokenClass('MULTIPLICATIVE_OPERATOR', 14);
 
   /**
    * A value used to indicate that the token type is a relational operator.
    */
   static const TokenClass RELATIONAL_OPERATOR =
-      const TokenClass('RELATIONAL_OPERATOR', 7);
+      const TokenClass('RELATIONAL_OPERATOR', 8);
 
   /**
    * A value used to indicate that the token type is a shift operator.
    */
   static const TokenClass SHIFT_OPERATOR =
-      const TokenClass('SHIFT_OPERATOR', 11);
+      const TokenClass('SHIFT_OPERATOR', 12);
 
   /**
    * A value used to indicate that the token type is a unary operator.
    */
   static const TokenClass UNARY_POSTFIX_OPERATOR =
-      const TokenClass('UNARY_POSTFIX_OPERATOR', 15);
+      const TokenClass('UNARY_POSTFIX_OPERATOR', 16);
 
   /**
    * A value used to indicate that the token type is a unary operator.
    */
   static const TokenClass UNARY_PREFIX_OPERATOR =
-      const TokenClass('UNARY_PREFIX_OPERATOR', 14);
+      const TokenClass('UNARY_PREFIX_OPERATOR', 15);
 
   /**
    * The name of the token class.
@@ -2274,8 +2299,7 @@ class TokenClass {
 }
 
 /**
- * The enumeration `TokenType` defines the types of tokens that can be returned
- * by the scanner.
+ * The types of tokens that can be returned by the scanner.
  */
 class TokenType {
   /**
@@ -2306,8 +2330,8 @@ class TokenType {
   static const TokenType AMPERSAND =
       const TokenType('AMPERSAND', TokenClass.BITWISE_AND_OPERATOR, "&");
 
-  static const TokenType AMPERSAND_AMPERSAND =
-      const TokenType('AMPERSAND_AMPERSAND', TokenClass.LOGICAL_AND_OPERATOR, "&&");
+  static const TokenType AMPERSAND_AMPERSAND = const TokenType(
+      'AMPERSAND_AMPERSAND', TokenClass.LOGICAL_AND_OPERATOR, "&&");
 
   static const TokenType AMPERSAND_EQ =
       const TokenType('AMPERSAND_EQ', TokenClass.ASSIGNMENT_OPERATOR, "&=");
@@ -2410,8 +2434,8 @@ class TokenType {
   static const TokenType OPEN_PAREN =
       const TokenType('OPEN_PAREN', TokenClass.UNARY_POSTFIX_OPERATOR, "(");
 
-  static const TokenType OPEN_SQUARE_BRACKET =
-      const TokenType('OPEN_SQUARE_BRACKET', TokenClass.UNARY_POSTFIX_OPERATOR, "[");
+  static const TokenType OPEN_SQUARE_BRACKET = const TokenType(
+      'OPEN_SQUARE_BRACKET', TokenClass.UNARY_POSTFIX_OPERATOR, "[");
 
   static const TokenType PERCENT =
       const TokenType('PERCENT', TokenClass.MULTIPLICATIVE_OPERATOR, "%");
@@ -2437,6 +2461,15 @@ class TokenType {
   static const TokenType QUESTION =
       const TokenType('QUESTION', TokenClass.CONDITIONAL_OPERATOR, "?");
 
+  static const TokenType QUESTION_PERIOD = const TokenType(
+      'QUESTION_PERIOD', TokenClass.UNARY_POSTFIX_OPERATOR, '?.');
+
+  static const TokenType QUESTION_QUESTION =
+      const TokenType('QUESTION_QUESTION', TokenClass.IF_NULL_OPERATOR, '??');
+
+  static const TokenType QUESTION_QUESTION_EQ = const TokenType(
+      'QUESTION_QUESTION_EQ', TokenClass.ASSIGNMENT_OPERATOR, '??=');
+
   static const TokenType SEMICOLON =
       const TokenType('SEMICOLON', TokenClass.NO_CLASS, ";");
 
@@ -2452,11 +2485,11 @@ class TokenType {
   static const TokenType STAR_EQ =
       const TokenType('STAR_EQ', TokenClass.ASSIGNMENT_OPERATOR, "*=");
 
-  static const TokenType STRING_INTERPOLATION_EXPRESSION =
-      const TokenType('STRING_INTERPOLATION_EXPRESSION', TokenClass.NO_CLASS, "\${");
+  static const TokenType STRING_INTERPOLATION_EXPRESSION = const TokenType(
+      'STRING_INTERPOLATION_EXPRESSION', TokenClass.NO_CLASS, "\${");
 
-  static const TokenType STRING_INTERPOLATION_IDENTIFIER =
-      const TokenType('STRING_INTERPOLATION_IDENTIFIER', TokenClass.NO_CLASS, "\$");
+  static const TokenType STRING_INTERPOLATION_IDENTIFIER = const TokenType(
+      'STRING_INTERPOLATION_IDENTIFIER', TokenClass.NO_CLASS, "\$");
 
   static const TokenType TILDE =
       const TokenType('TILDE', TokenClass.UNARY_PREFIX_OPERATOR, "~");
@@ -2492,8 +2525,8 @@ class TokenType {
    */
   final String lexeme;
 
-  const TokenType(this.name, [this._tokenClass = TokenClass.NO_CLASS,
-      this.lexeme = null]);
+  const TokenType(this.name,
+      [this._tokenClass = TokenClass.NO_CLASS, this.lexeme = null]);
 
   /**
    * Return `true` if this type of token represents an additive operator.
@@ -2518,14 +2551,13 @@ class TokenType {
    * operators can have an effect because evaluation of the right-hand operand
    * is conditional.
    */
-  bool get isAssociativeOperator =>
-      this == AMPERSAND ||
-          this == AMPERSAND_AMPERSAND ||
-          this == BAR ||
-          this == BAR_BAR ||
-          this == CARET ||
-          this == PLUS ||
-          this == STAR;
+  bool get isAssociativeOperator => this == AMPERSAND ||
+      this == AMPERSAND_AMPERSAND ||
+      this == BAR ||
+      this == BAR_BAR ||
+      this == CARET ||
+      this == PLUS ||
+      this == STAR;
 
   /**
    * Return `true` if this type of token represents an equality operator.
@@ -2547,11 +2579,10 @@ class TokenType {
   /**
    * Return `true` if this token type represents an operator.
    */
-  bool get isOperator =>
-      _tokenClass != TokenClass.NO_CLASS &&
-          this != OPEN_PAREN &&
-          this != OPEN_SQUARE_BRACKET &&
-          this != PERIOD;
+  bool get isOperator => _tokenClass != TokenClass.NO_CLASS &&
+      this != OPEN_PAREN &&
+      this != OPEN_SQUARE_BRACKET &&
+      this != PERIOD;
 
   /**
    * Return `true` if this type of token represents a relational operator.
@@ -2580,26 +2611,25 @@ class TokenType {
    * Return `true` if this token type represents an operator that can be defined
    * by users.
    */
-  bool get isUserDefinableOperator =>
-      identical(lexeme, "==") ||
-          identical(lexeme, "~") ||
-          identical(lexeme, "[]") ||
-          identical(lexeme, "[]=") ||
-          identical(lexeme, "*") ||
-          identical(lexeme, "/") ||
-          identical(lexeme, "%") ||
-          identical(lexeme, "~/") ||
-          identical(lexeme, "+") ||
-          identical(lexeme, "-") ||
-          identical(lexeme, "<<") ||
-          identical(lexeme, ">>") ||
-          identical(lexeme, ">=") ||
-          identical(lexeme, ">") ||
-          identical(lexeme, "<=") ||
-          identical(lexeme, "<") ||
-          identical(lexeme, "&") ||
-          identical(lexeme, "^") ||
-          identical(lexeme, "|");
+  bool get isUserDefinableOperator => identical(lexeme, "==") ||
+      identical(lexeme, "~") ||
+      identical(lexeme, "[]") ||
+      identical(lexeme, "[]=") ||
+      identical(lexeme, "*") ||
+      identical(lexeme, "/") ||
+      identical(lexeme, "%") ||
+      identical(lexeme, "~/") ||
+      identical(lexeme, "+") ||
+      identical(lexeme, "-") ||
+      identical(lexeme, "<<") ||
+      identical(lexeme, ">>") ||
+      identical(lexeme, ">=") ||
+      identical(lexeme, ">") ||
+      identical(lexeme, "<=") ||
+      identical(lexeme, "<") ||
+      identical(lexeme, "&") ||
+      identical(lexeme, "^") ||
+      identical(lexeme, "|");
 
   /**
    * Return the precedence of the token, or `0` if the token does not represent
@@ -2619,7 +2649,7 @@ class TokenType_EOF extends TokenType {
 }
 
 /**
- * A `TokenWithComment` is a normal token that is preceded by comments.
+ * A normal token that is preceded by comments.
  */
 class TokenWithComment extends Token {
   /**

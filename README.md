@@ -1,5 +1,3 @@
-# This repo is an experiment, please don't rely on it, it probably won't be here shortly
-
 This code is part of an experimental port of the Editor's analysis engine from
 Java to Dart. While we will continue to support the Java version of the analysis
 engine and the services built on it, we also intend to provide the same services

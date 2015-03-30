@@ -27,6 +27,27 @@ typedef AnalysisTask BuildTask(AnalysisContext context, AnalysisTarget target);
 typedef Map<String, TaskInput> CreateTaskInputs(AnalysisTarget target);
 
 /**
+ * A function that converts an object of the type [B] into a [TaskInput].
+ * This is used, for example, by a [ListTaskInput] to create task inputs
+ * for each value in a list of values.
+ */
+typedef TaskInput<E> UnaryFunction<B, E>(B object);
+
+/**
+ * An [AnalysisTarget] wrapper for an [AnalysisContext].
+ */
+class AnalysisContextTarget implements AnalysisTarget {
+  static final AnalysisContextTarget request = new AnalysisContextTarget(null);
+
+  final AnalysisContext context;
+
+  AnalysisContextTarget(this.context);
+
+  @override
+  Source get source => null;
+}
+
+/**
  * An object with which an analysis result can be associated.
  *
  * Clients are allowed to subtype this class when creating new kinds of targets.
@@ -154,8 +175,7 @@ abstract class AnalysisTask {
     } on AnalysisException catch (exception, stackTrace) {
       caughtException = new CaughtException(exception, stackTrace);
       AnalysisEngine.instance.logger.logInformation(
-          "Task failed: ${description}",
-          caughtException);
+          "Task failed: ${description}", caughtException);
     }
   }
 
@@ -178,8 +198,7 @@ abstract class AnalysisTask {
         contextName = 'unnamed';
       }
       AnalysisEngine.instance.instrumentationService.logAnalysisTask(
-          contextName,
-          description);
+          contextName, description);
       //
       // Gather statistics on the performance of the task.
       //
@@ -199,7 +218,7 @@ abstract class AnalysisTask {
       } finally {
         stopwatch.stop();
       }
-    } on AnalysisException catch (exception) {
+    } on AnalysisException {
       rethrow;
     } catch (exception, stackTrace) {
       throw new AnalysisException(
@@ -215,19 +234,74 @@ abstract class AnalysisTask {
  *
  * Clients are not expected to subtype this class.
  */
-abstract class ContributionPoint<V> extends ResultDescriptor<V> {
+abstract class CompositeResultDescriptor<V> extends ResultDescriptor<V> {
   /**
-   * Initialize a newly created contribution point to have the given [name].
+   * Initialize a newly created composite result to have the given [name].
    */
-  factory ContributionPoint(String name) = ContributionPointImpl;
+  factory CompositeResultDescriptor(
+      String name) = CompositeResultDescriptorImpl;
 
   /**
    * Return a list containing the descriptors of the results that are unioned
-   * together to comprise the value of this result.
+   * together to compose the value of this result.
    *
    * Clients must not modify the returned list.
    */
   List<ResultDescriptor<V>> get contributors;
+}
+
+/**
+ * A description of a [List]-based analysis result that can be computed by an
+ * [AnalysisTask].
+ *
+ * Clients are not expected to subtype this class.
+ */
+abstract class ListResultDescriptor<E> implements ResultDescriptor<List<E>> {
+  /**
+   * Initialize a newly created analysis result to have the given [name]. If a
+   * composite result is specified, then this result will contribute to it.
+   */
+  factory ListResultDescriptor(String name, List<E> defaultValue,
+      {CompositeResultDescriptor<List<E>> contributesTo}) = ListResultDescriptorImpl<E>;
+
+  @override
+  ListTaskInput<E> of(AnalysisTarget target);
+}
+
+/**
+ * A description of an input to an [AnalysisTask] that can be used to compute
+ * that input.
+ *
+ * Clients are not expected to subtype this class.
+ */
+abstract class ListTaskInput<E> extends TaskInput<List<E>> {
+  /**
+   * Return a task input that can be used to compute a list whose elements are
+   * the result of passing the elements of this input to the [mapper] function.
+   */
+  ListTaskInput /*<V>*/ toList(UnaryFunction<E, dynamic /*<V>*/ > mapper);
+
+  /**
+   * Return a task input that can be used to compute a list whose elements are
+   * [valueResult]'s associated with those elements.
+   */
+  ListTaskInput /*<V>*/ toListOf(ResultDescriptor /*<V>*/ valueResult);
+
+  /**
+   * Return a task input that can be used to compute a map whose keys are the
+   * elements of this input and whose values are the result of passing the
+   * corresponding key to the [mapper] function.
+   */
+  TaskInput<Map<E, dynamic /*V*/ >> toMap(
+      UnaryFunction<E, dynamic /*<V>*/ > mapper);
+
+  /**
+   * Return a task input that can be used to compute a map whose keys are the
+   * elements of this input and whose values are the [valueResult]'s associated
+   * with those elements.
+   */
+  TaskInput<Map<AnalysisTarget, dynamic /*V*/ >> toMapOf(
+      ResultDescriptor /*<V>*/ valueResult);
 }
 
 /**
@@ -238,10 +312,10 @@ abstract class ContributionPoint<V> extends ResultDescriptor<V> {
 abstract class ResultDescriptor<V> {
   /**
    * Initialize a newly created analysis result to have the given [name]. If a
-   * contribution point is specified, then this result will contribute to it.
+   * composite result is specified, then this result will contribute to it.
    */
   factory ResultDescriptor(String name, V defaultValue,
-      {ContributionPoint<V> contributesTo}) = ResultDescriptorImpl;
+      {CompositeResultDescriptor<V> contributesTo}) = ResultDescriptorImpl;
 
   /**
    * Return the default value for results described by this descriptor.
@@ -249,10 +323,15 @@ abstract class ResultDescriptor<V> {
   V get defaultValue;
 
   /**
+   * Return the name of this descriptor.
+   */
+  String get name;
+
+  /**
    * Return a task input that can be used to compute this result for the given
    * [target].
    */
-  TaskInput<V> inputFor(AnalysisTarget target);
+  TaskInput<V> of(AnalysisTarget target);
 }
 
 /**
@@ -266,8 +345,8 @@ abstract class TaskDescriptor {
    * the instance of [AnalysisTask] thusly described.
    */
   factory TaskDescriptor(String name, BuildTask buildTask,
-      CreateTaskInputs inputBuilder, List<ResultDescriptor> results) =
-      TaskDescriptorImpl;
+      CreateTaskInputs inputBuilder,
+      List<ResultDescriptor> results) = TaskDescriptorImpl;
 
   /**
    * Return the builder used to build the inputs to the task.

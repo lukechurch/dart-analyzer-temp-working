@@ -20,54 +20,6 @@ main() {
   runReflectiveTests(TokenTypeTest);
 }
 
-@reflectiveTest
-class CharSequenceReaderTest {
-  void test_advance() {
-    CharSequenceReader reader = new CharSequenceReader("x");
-    expect(reader.advance(), 0x78);
-    expect(reader.advance(), -1);
-    expect(reader.advance(), -1);
-  }
-
-  void test_creation() {
-    expect(new CharSequenceReader("x"), isNotNull);
-  }
-
-  void test_getOffset() {
-    CharSequenceReader reader = new CharSequenceReader("x");
-    expect(reader.offset, -1);
-    reader.advance();
-    expect(reader.offset, 0);
-    reader.advance();
-    expect(reader.offset, 0);
-  }
-
-  void test_getString() {
-    CharSequenceReader reader = new CharSequenceReader("xyzzy");
-    reader.offset = 3;
-    expect(reader.getString(1, 0), "yzz");
-    expect(reader.getString(2, 1), "zzy");
-  }
-
-  void test_peek() {
-    CharSequenceReader reader = new CharSequenceReader("xy");
-    expect(reader.peek(), 0x78);
-    expect(reader.peek(), 0x78);
-    reader.advance();
-    expect(reader.peek(), 0x79);
-    expect(reader.peek(), 0x79);
-    reader.advance();
-    expect(reader.peek(), -1);
-    expect(reader.peek(), -1);
-  }
-
-  void test_setOffset() {
-    CharSequenceReader reader = new CharSequenceReader("xyz");
-    reader.offset = 2;
-    expect(reader.offset, 2);
-  }
-}
-
 class CharacterRangeReaderTest extends EngineTestCase {
   void test_advance() {
     CharSequenceReader baseReader = new CharSequenceReader("xyzzy");
@@ -125,6 +77,54 @@ class CharacterRangeReaderTest extends EngineTestCase {
 }
 
 @reflectiveTest
+class CharSequenceReaderTest {
+  void test_advance() {
+    CharSequenceReader reader = new CharSequenceReader("x");
+    expect(reader.advance(), 0x78);
+    expect(reader.advance(), -1);
+    expect(reader.advance(), -1);
+  }
+
+  void test_creation() {
+    expect(new CharSequenceReader("x"), isNotNull);
+  }
+
+  void test_getOffset() {
+    CharSequenceReader reader = new CharSequenceReader("x");
+    expect(reader.offset, -1);
+    reader.advance();
+    expect(reader.offset, 0);
+    reader.advance();
+    expect(reader.offset, 0);
+  }
+
+  void test_getString() {
+    CharSequenceReader reader = new CharSequenceReader("xyzzy");
+    reader.offset = 3;
+    expect(reader.getString(1, 0), "yzz");
+    expect(reader.getString(2, 1), "zzy");
+  }
+
+  void test_peek() {
+    CharSequenceReader reader = new CharSequenceReader("xy");
+    expect(reader.peek(), 0x78);
+    expect(reader.peek(), 0x78);
+    reader.advance();
+    expect(reader.peek(), 0x79);
+    expect(reader.peek(), 0x79);
+    reader.advance();
+    expect(reader.peek(), -1);
+    expect(reader.peek(), -1);
+  }
+
+  void test_setOffset() {
+    CharSequenceReader reader = new CharSequenceReader("xyz");
+    reader.offset = 2;
+    expect(reader.offset, 2);
+  }
+}
+
+@reflectiveTest
 class KeywordStateTest {
   void test_KeywordState() {
     //
@@ -170,16 +170,20 @@ class KeywordStateTest {
 
 @reflectiveTest
 class ScannerTest {
+  /**
+   * If non-null, this value is used to override the default value of
+   * [Scanner.enableNullAwareOperators] before scanning.
+   */
+  bool _enableNullAwareOperators;
+
   void fail_incomplete_string_interpolation() {
     // https://code.google.com/p/dart/issues/detail?id=18073
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        9,
-        "\"foo \${bar",
-        [
-            new StringToken(TokenType.STRING, "\"foo ", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 5),
-            new StringToken(TokenType.IDENTIFIER, "bar", 7)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 9,
+        "\"foo \${bar", [
+      new StringToken(TokenType.STRING, "\"foo ", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 5),
+      new StringToken(TokenType.IDENTIFIER, "bar", 7)
+    ]);
   }
 
   void test_ampersand() {
@@ -255,8 +259,7 @@ class ScannerTest {
   }
 
   void test_comment_disabled_multi() {
-    Scanner scanner = new Scanner(
-        null,
+    Scanner scanner = new Scanner(null,
         new CharSequenceReader("/* comment */ "),
         AnalysisErrorListener.NULL_LISTENER);
     scanner.preserveComments = false;
@@ -275,8 +278,7 @@ class ScannerTest {
 
   void test_comment_nested() {
     _assertComment(
-        TokenType.MULTI_LINE_COMMENT,
-        "/* comment /* within a */ comment */");
+        TokenType.MULTI_LINE_COMMENT, "/* comment /* within a */ comment */");
   }
 
   void test_comment_single() {
@@ -581,42 +583,47 @@ class ScannerTest {
 
   void test_lineInfo_multilineComment() {
     String source = "/*\r *\r */";
-    _assertLineInfo(
-        source,
-        [
-            new ScannerTest_ExpectedLocation(0, 1, 1),
-            new ScannerTest_ExpectedLocation(4, 2, 2),
-            new ScannerTest_ExpectedLocation(source.length - 1, 3, 3)]);
+    _assertLineInfo(source, [
+      new ScannerTest_ExpectedLocation(0, 1, 1),
+      new ScannerTest_ExpectedLocation(4, 2, 2),
+      new ScannerTest_ExpectedLocation(source.length - 1, 3, 3)
+    ]);
   }
 
   void test_lineInfo_multilineString() {
     String source = "'''a\r\nbc\r\nd'''";
-    _assertLineInfo(
-        source,
-        [
-            new ScannerTest_ExpectedLocation(0, 1, 1),
-            new ScannerTest_ExpectedLocation(7, 2, 2),
-            new ScannerTest_ExpectedLocation(source.length - 1, 3, 4)]);
+    _assertLineInfo(source, [
+      new ScannerTest_ExpectedLocation(0, 1, 1),
+      new ScannerTest_ExpectedLocation(7, 2, 2),
+      new ScannerTest_ExpectedLocation(source.length - 1, 3, 4)
+    ]);
+  }
+
+  void test_lineInfo_multilineString_raw() {
+    String source = "var a = r'''\nblah\n''';\n\nfoo";
+    _assertLineInfo(source, [
+      new ScannerTest_ExpectedLocation(0, 1, 1),
+      new ScannerTest_ExpectedLocation(14, 2, 2),
+      new ScannerTest_ExpectedLocation(source.length - 2, 5, 2)
+    ]);
   }
 
   void test_lineInfo_simpleClass() {
     String source =
         "class Test {\r\n    String s = '...';\r\n    int get x => s.MISSING_GETTER;\r\n}";
-    _assertLineInfo(
-        source,
-        [
-            new ScannerTest_ExpectedLocation(0, 1, 1),
-            new ScannerTest_ExpectedLocation(source.indexOf("MISSING_GETTER"), 3, 20),
-            new ScannerTest_ExpectedLocation(source.length - 1, 4, 1)]);
+    _assertLineInfo(source, [
+      new ScannerTest_ExpectedLocation(0, 1, 1),
+      new ScannerTest_ExpectedLocation(source.indexOf("MISSING_GETTER"), 3, 20),
+      new ScannerTest_ExpectedLocation(source.length - 1, 4, 1)
+    ]);
   }
 
   void test_lineInfo_slashN() {
     String source = "class Test {\n}";
-    _assertLineInfo(
-        source,
-        [
-            new ScannerTest_ExpectedLocation(0, 1, 1),
-            new ScannerTest_ExpectedLocation(source.indexOf("}"), 2, 1)]);
+    _assertLineInfo(source, [
+      new ScannerTest_ExpectedLocation(0, 1, 1),
+      new ScannerTest_ExpectedLocation(source.indexOf("}"), 2, 1)
+    ]);
   }
 
   void test_lt() {
@@ -647,10 +654,6 @@ class ScannerTest {
     _assertToken(TokenType.MINUS_MINUS, "--");
   }
 
-  void test_openSquareBracket() {
-    _assertToken(TokenType.OPEN_SQUARE_BRACKET, "[");
-  }
-
   void test_open_curly_bracket() {
     _assertToken(TokenType.OPEN_CURLY_BRACKET, "{");
   }
@@ -660,6 +663,10 @@ class ScannerTest {
   }
 
   void test_open_square_bracket() {
+    _assertToken(TokenType.OPEN_SQUARE_BRACKET, "[");
+  }
+
+  void test_openSquareBracket() {
     _assertToken(TokenType.OPEN_SQUARE_BRACKET, "[");
   }
 
@@ -675,34 +682,32 @@ class ScannerTest {
     _assertToken(TokenType.PERIOD, ".");
   }
 
-  void test_periodAfterNumberNotIncluded_identifier() {
-    _assertTokens(
-        "42.isEven()",
-        [
-            new StringToken(TokenType.INT, "42", 0),
-            new Token(TokenType.PERIOD, 2),
-            new StringToken(TokenType.IDENTIFIER, "isEven", 3),
-            new Token(TokenType.OPEN_PAREN, 9),
-            new Token(TokenType.CLOSE_PAREN, 10)]);
-  }
-
-  void test_periodAfterNumberNotIncluded_period() {
-    _assertTokens(
-        "42..isEven()",
-        [
-            new StringToken(TokenType.INT, "42", 0),
-            new Token(TokenType.PERIOD_PERIOD, 2),
-            new StringToken(TokenType.IDENTIFIER, "isEven", 4),
-            new Token(TokenType.OPEN_PAREN, 10),
-            new Token(TokenType.CLOSE_PAREN, 11)]);
-  }
-
   void test_period_period() {
     _assertToken(TokenType.PERIOD_PERIOD, "..");
   }
 
   void test_period_period_period() {
     _assertToken(TokenType.PERIOD_PERIOD_PERIOD, "...");
+  }
+
+  void test_periodAfterNumberNotIncluded_identifier() {
+    _assertTokens("42.isEven()", [
+      new StringToken(TokenType.INT, "42", 0),
+      new Token(TokenType.PERIOD, 2),
+      new StringToken(TokenType.IDENTIFIER, "isEven", 3),
+      new Token(TokenType.OPEN_PAREN, 9),
+      new Token(TokenType.CLOSE_PAREN, 10)
+    ]);
+  }
+
+  void test_periodAfterNumberNotIncluded_period() {
+    _assertTokens("42..isEven()", [
+      new StringToken(TokenType.INT, "42", 0),
+      new Token(TokenType.PERIOD_PERIOD, 2),
+      new StringToken(TokenType.IDENTIFIER, "isEven", 4),
+      new Token(TokenType.OPEN_PAREN, 10),
+      new Token(TokenType.CLOSE_PAREN, 11)
+    ]);
   }
 
   void test_plus() {
@@ -721,16 +726,31 @@ class ScannerTest {
     _assertToken(TokenType.QUESTION, "?");
   }
 
+  void test_question_dot() {
+    _enableNullAwareOperators = true;
+    _assertToken(TokenType.QUESTION_PERIOD, "?.");
+  }
+
+  void test_question_question() {
+    _enableNullAwareOperators = true;
+    _assertToken(TokenType.QUESTION_QUESTION, "??");
+  }
+
+  void test_question_question_eq() {
+    _enableNullAwareOperators = true;
+    _assertToken(TokenType.QUESTION_QUESTION_EQ, "??=");
+  }
+
   void test_scriptTag_withArgs() {
     _assertToken(TokenType.SCRIPT_TAG, "#!/bin/dart -debug");
   }
 
-  void test_scriptTag_withSpace() {
-    _assertToken(TokenType.SCRIPT_TAG, "#! /bin/dart");
-  }
-
   void test_scriptTag_withoutSpace() {
     _assertToken(TokenType.SCRIPT_TAG, "#!/bin/dart");
+  }
+
+  void test_scriptTag_withSpace() {
+    _assertToken(TokenType.SCRIPT_TAG, "#! /bin/dart");
   }
 
   void test_semicolon() {
@@ -789,24 +809,22 @@ class ScannerTest {
   }
 
   void test_string_multi_interpolation_block() {
-    _assertTokens(
-        "\"Hello \${name}!\"",
-        [
-            new StringToken(TokenType.STRING, "\"Hello ", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 7),
-            new StringToken(TokenType.IDENTIFIER, "name", 9),
-            new Token(TokenType.CLOSE_CURLY_BRACKET, 13),
-            new StringToken(TokenType.STRING, "!\"", 14)]);
+    _assertTokens("\"Hello \${name}!\"", [
+      new StringToken(TokenType.STRING, "\"Hello ", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 7),
+      new StringToken(TokenType.IDENTIFIER, "name", 9),
+      new Token(TokenType.CLOSE_CURLY_BRACKET, 13),
+      new StringToken(TokenType.STRING, "!\"", 14)
+    ]);
   }
 
   void test_string_multi_interpolation_identifier() {
-    _assertTokens(
-        "\"Hello \$name!\"",
-        [
-            new StringToken(TokenType.STRING, "\"Hello ", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 7),
-            new StringToken(TokenType.IDENTIFIER, "name", 8),
-            new StringToken(TokenType.STRING, "!\"", 12)]);
+    _assertTokens("\"Hello \$name!\"", [
+      new StringToken(TokenType.STRING, "\"Hello ", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 7),
+      new StringToken(TokenType.IDENTIFIER, "name", 8),
+      new StringToken(TokenType.STRING, "!\"", 12)
+    ]);
   }
 
   void test_string_multi_single() {
@@ -818,35 +836,28 @@ class ScannerTest {
   }
 
   void test_string_multi_unterminated() {
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        8,
-        "'''string",
-        [new StringToken(TokenType.STRING, "'''string", 0)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 8,
+        "'''string", [new StringToken(TokenType.STRING, "'''string", 0)]);
   }
 
   void test_string_multi_unterminated_interpolation_block() {
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        8,
-        "'''\${name",
-        [
-            new StringToken(TokenType.STRING, "'''", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 3),
-            new StringToken(TokenType.IDENTIFIER, "name", 5),
-            new StringToken(TokenType.STRING, "", 9)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 8,
+        "'''\${name", [
+      new StringToken(TokenType.STRING, "'''", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 3),
+      new StringToken(TokenType.IDENTIFIER, "name", 5),
+      new StringToken(TokenType.STRING, "", 9)
+    ]);
   }
 
   void test_string_multi_unterminated_interpolation_identifier() {
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        7,
-        "'''\$name",
-        [
-            new StringToken(TokenType.STRING, "'''", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 3),
-            new StringToken(TokenType.IDENTIFIER, "name", 4),
-            new StringToken(TokenType.STRING, "", 8)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 7,
+        "'''\$name", [
+      new StringToken(TokenType.STRING, "'''", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 3),
+      new StringToken(TokenType.IDENTIFIER, "name", 4),
+      new StringToken(TokenType.STRING, "", 8)
+    ]);
   }
 
   void test_string_raw_multi_double() {
@@ -859,11 +870,8 @@ class ScannerTest {
 
   void test_string_raw_multi_unterminated() {
     String source = "r'''string";
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        9,
-        source,
-        [new StringToken(TokenType.STRING, source, 0)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 9,
+        source, [new StringToken(TokenType.STRING, source, 0)]);
   }
 
   void test_string_raw_simple_double() {
@@ -876,20 +884,14 @@ class ScannerTest {
 
   void test_string_raw_simple_unterminated_eof() {
     String source = "r'string";
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        7,
-        source,
-        [new StringToken(TokenType.STRING, source, 0)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 7,
+        source, [new StringToken(TokenType.STRING, source, 0)]);
   }
 
   void test_string_raw_simple_unterminated_eol() {
     String source = "r'string";
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        8,
-        "$source\n",
-        [new StringToken(TokenType.STRING, source, 0)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 8,
+        "$source\n", [new StringToken(TokenType.STRING, source, 0)]);
   }
 
   void test_string_simple_double() {
@@ -901,89 +903,82 @@ class ScannerTest {
   }
 
   void test_string_simple_interpolation_adjacentIdentifiers() {
-    _assertTokens(
-        "'\$a\$b'",
-        [
-            new StringToken(TokenType.STRING, "'", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 1),
-            new StringToken(TokenType.IDENTIFIER, "a", 2),
-            new StringToken(TokenType.STRING, "", 3),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 3),
-            new StringToken(TokenType.IDENTIFIER, "b", 4),
-            new StringToken(TokenType.STRING, "'", 5)]);
+    _assertTokens("'\$a\$b'", [
+      new StringToken(TokenType.STRING, "'", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 1),
+      new StringToken(TokenType.IDENTIFIER, "a", 2),
+      new StringToken(TokenType.STRING, "", 3),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 3),
+      new StringToken(TokenType.IDENTIFIER, "b", 4),
+      new StringToken(TokenType.STRING, "'", 5)
+    ]);
   }
 
   void test_string_simple_interpolation_block() {
-    _assertTokens(
-        "'Hello \${name}!'",
-        [
-            new StringToken(TokenType.STRING, "'Hello ", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 7),
-            new StringToken(TokenType.IDENTIFIER, "name", 9),
-            new Token(TokenType.CLOSE_CURLY_BRACKET, 13),
-            new StringToken(TokenType.STRING, "!'", 14)]);
+    _assertTokens("'Hello \${name}!'", [
+      new StringToken(TokenType.STRING, "'Hello ", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 7),
+      new StringToken(TokenType.IDENTIFIER, "name", 9),
+      new Token(TokenType.CLOSE_CURLY_BRACKET, 13),
+      new StringToken(TokenType.STRING, "!'", 14)
+    ]);
   }
 
   void test_string_simple_interpolation_blockWithNestedMap() {
-    _assertTokens(
-        "'a \${f({'b' : 'c'})} d'",
-        [
-            new StringToken(TokenType.STRING, "'a ", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 3),
-            new StringToken(TokenType.IDENTIFIER, "f", 5),
-            new Token(TokenType.OPEN_PAREN, 6),
-            new Token(TokenType.OPEN_CURLY_BRACKET, 7),
-            new StringToken(TokenType.STRING, "'b'", 8),
-            new Token(TokenType.COLON, 12),
-            new StringToken(TokenType.STRING, "'c'", 14),
-            new Token(TokenType.CLOSE_CURLY_BRACKET, 17),
-            new Token(TokenType.CLOSE_PAREN, 18),
-            new Token(TokenType.CLOSE_CURLY_BRACKET, 19),
-            new StringToken(TokenType.STRING, " d'", 20)]);
+    _assertTokens("'a \${f({'b' : 'c'})} d'", [
+      new StringToken(TokenType.STRING, "'a ", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 3),
+      new StringToken(TokenType.IDENTIFIER, "f", 5),
+      new Token(TokenType.OPEN_PAREN, 6),
+      new Token(TokenType.OPEN_CURLY_BRACKET, 7),
+      new StringToken(TokenType.STRING, "'b'", 8),
+      new Token(TokenType.COLON, 12),
+      new StringToken(TokenType.STRING, "'c'", 14),
+      new Token(TokenType.CLOSE_CURLY_BRACKET, 17),
+      new Token(TokenType.CLOSE_PAREN, 18),
+      new Token(TokenType.CLOSE_CURLY_BRACKET, 19),
+      new StringToken(TokenType.STRING, " d'", 20)
+    ]);
   }
 
   void test_string_simple_interpolation_firstAndLast() {
-    _assertTokens(
-        "'\$greeting \$name'",
-        [
-            new StringToken(TokenType.STRING, "'", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 1),
-            new StringToken(TokenType.IDENTIFIER, "greeting", 2),
-            new StringToken(TokenType.STRING, " ", 10),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 11),
-            new StringToken(TokenType.IDENTIFIER, "name", 12),
-            new StringToken(TokenType.STRING, "'", 16)]);
+    _assertTokens("'\$greeting \$name'", [
+      new StringToken(TokenType.STRING, "'", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 1),
+      new StringToken(TokenType.IDENTIFIER, "greeting", 2),
+      new StringToken(TokenType.STRING, " ", 10),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 11),
+      new StringToken(TokenType.IDENTIFIER, "name", 12),
+      new StringToken(TokenType.STRING, "'", 16)
+    ]);
   }
 
   void test_string_simple_interpolation_identifier() {
-    _assertTokens(
-        "'Hello \$name!'",
-        [
-            new StringToken(TokenType.STRING, "'Hello ", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 7),
-            new StringToken(TokenType.IDENTIFIER, "name", 8),
-            new StringToken(TokenType.STRING, "!'", 12)]);
+    _assertTokens("'Hello \$name!'", [
+      new StringToken(TokenType.STRING, "'Hello ", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 7),
+      new StringToken(TokenType.IDENTIFIER, "name", 8),
+      new StringToken(TokenType.STRING, "!'", 12)
+    ]);
   }
 
   void test_string_simple_interpolation_missingIdentifier() {
-    _assertTokens(
-        "'\$x\$'",
-        [
-            new StringToken(TokenType.STRING, "'", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 1),
-            new StringToken(TokenType.IDENTIFIER, "x", 2),
-            new StringToken(TokenType.STRING, "", 3),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 3),
-            new StringToken(TokenType.STRING, "'", 4)]);
+    _assertTokens("'\$x\$'", [
+      new StringToken(TokenType.STRING, "'", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 1),
+      new StringToken(TokenType.IDENTIFIER, "x", 2),
+      new StringToken(TokenType.STRING, "", 3),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 3),
+      new StringToken(TokenType.STRING, "'", 4)
+    ]);
   }
 
   void test_string_simple_interpolation_nonIdentifier() {
-    _assertTokens(
-        "'\$1'",
-        [
-            new StringToken(TokenType.STRING, "'", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 1),
-            new StringToken(TokenType.STRING, "1'", 2)]);
+    _assertTokens("'\$1'", [
+      new StringToken(TokenType.STRING, "'", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 1),
+      new StringToken(TokenType.STRING, "1'", 2)
+    ]);
   }
 
   void test_string_simple_single() {
@@ -992,44 +987,34 @@ class ScannerTest {
 
   void test_string_simple_unterminated_eof() {
     String source = "'string";
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        6,
-        source,
-        [new StringToken(TokenType.STRING, source, 0)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 6,
+        source, [new StringToken(TokenType.STRING, source, 0)]);
   }
 
   void test_string_simple_unterminated_eol() {
     String source = "'string";
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        7,
-        "$source\r",
-        [new StringToken(TokenType.STRING, source, 0)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 7,
+        "$source\r", [new StringToken(TokenType.STRING, source, 0)]);
   }
 
   void test_string_simple_unterminated_interpolation_block() {
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        6,
-        "'\${name",
-        [
-            new StringToken(TokenType.STRING, "'", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 1),
-            new StringToken(TokenType.IDENTIFIER, "name", 3),
-            new StringToken(TokenType.STRING, "", 7)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 6,
+        "'\${name", [
+      new StringToken(TokenType.STRING, "'", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_EXPRESSION, "\${", 1),
+      new StringToken(TokenType.IDENTIFIER, "name", 3),
+      new StringToken(TokenType.STRING, "", 7)
+    ]);
   }
 
   void test_string_simple_unterminated_interpolation_identifier() {
-    _assertErrorAndTokens(
-        ScannerErrorCode.UNTERMINATED_STRING_LITERAL,
-        5,
-        "'\$name",
-        [
-            new StringToken(TokenType.STRING, "'", 0),
-            new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 1),
-            new StringToken(TokenType.IDENTIFIER, "name", 2),
-            new StringToken(TokenType.STRING, "", 6)]);
+    _assertErrorAndTokens(ScannerErrorCode.UNTERMINATED_STRING_LITERAL, 5,
+        "'\$name", [
+      new StringToken(TokenType.STRING, "'", 0),
+      new StringToken(TokenType.STRING_INTERPOLATION_IDENTIFIER, "\$", 1),
+      new StringToken(TokenType.IDENTIFIER, "name", 2),
+      new StringToken(TokenType.STRING, "", 6)
+    ]);
   }
 
   void test_tilde() {
@@ -1084,18 +1069,14 @@ class ScannerTest {
    * [expectedOffset] the string offset that should be associated with the error
    * [source] the source to be scanned to produce the error
    */
-  void _assertError(ScannerErrorCode expectedError, int expectedOffset,
-      String source) {
+  void _assertError(
+      ScannerErrorCode expectedError, int expectedOffset, String source) {
     GatheringErrorListener listener = new GatheringErrorListener();
     _scanWithListener(source, listener);
-    listener.assertErrors(
-        [
-            new AnalysisError.con2(
-                null,
-                expectedOffset,
-                1,
-                expectedError,
-                [source.codeUnitAt(expectedOffset)])]);
+    listener.assertErrors([
+      new AnalysisError.con2(null, expectedOffset, 1, expectedError,
+          [source.codeUnitAt(expectedOffset)])
+    ]);
   }
 
   /**
@@ -1111,14 +1092,10 @@ class ScannerTest {
       String source, List<Token> expectedTokens) {
     GatheringErrorListener listener = new GatheringErrorListener();
     Token token = _scanWithListener(source, listener);
-    listener.assertErrors(
-        [
-            new AnalysisError.con2(
-                null,
-                expectedOffset,
-                1,
-                expectedError,
-                [source.codeUnitAt(expectedOffset)])]);
+    listener.assertErrors([
+      new AnalysisError.con2(null, expectedOffset, 1, expectedError,
+          [source.codeUnitAt(expectedOffset)])
+    ]);
     _checkTokens(token, expectedTokens);
   }
 
@@ -1148,17 +1125,21 @@ class ScannerTest {
     expect(token.next.type, TokenType.EOF);
   }
 
-  void _assertLineInfo(String source,
-      List<ScannerTest_ExpectedLocation> expectedLocations) {
+  void _assertLineInfo(
+      String source, List<ScannerTest_ExpectedLocation> expectedLocations) {
     GatheringErrorListener listener = new GatheringErrorListener();
     _scanWithListener(source, listener);
     listener.assertNoErrors();
     LineInfo info = listener.getLineInfo(new TestSource());
     expect(info, isNotNull);
-    for (ScannerTest_ExpectedLocation expectedLocation in expectedLocations) {
+    int count = expectedLocations.length;
+    for (int i = 0; i < count; i++) {
+      ScannerTest_ExpectedLocation expectedLocation = expectedLocations[i];
       LineInfo_Location location = info.getLocation(expectedLocation._offset);
-      expect(location.lineNumber, expectedLocation._lineNumber);
-      expect(location.columnNumber, expectedLocation._columnNumber);
+      expect(location.lineNumber, expectedLocation._lineNumber,
+          reason: 'Line number in location $i');
+      expect(location.columnNumber, expectedLocation._columnNumber,
+          reason: 'Column number in location $i');
     }
   }
 
@@ -1226,17 +1207,11 @@ class ScannerTest {
     for (int i = 0; i < expectedTokens.length; i++) {
       Token expectedToken = expectedTokens[i];
       expect(token.type, expectedToken.type, reason: "Wrong type for token $i");
-      expect(
-          token.offset,
-          expectedToken.offset,
+      expect(token.offset, expectedToken.offset,
           reason: "Wrong offset for token $i");
-      expect(
-          token.length,
-          expectedToken.length,
+      expect(token.length, expectedToken.length,
           reason: "Wrong length for token $i");
-      expect(
-          token.lexeme,
-          expectedToken.lexeme,
+      expect(token.lexeme, expectedToken.lexeme,
           reason: "Wrong lexeme for token $i");
       token = token.next;
       expect(token, isNotNull);
@@ -1254,6 +1229,9 @@ class ScannerTest {
   Token _scanWithListener(String source, GatheringErrorListener listener) {
     Scanner scanner =
         new Scanner(null, new CharSequenceReader(source), listener);
+    if (_enableNullAwareOperators != null) {
+      scanner.enableNullAwareOperators = _enableNullAwareOperators;
+    }
     Token result = scanner.tokenize();
     listener.setLineInfo(new TestSource(), scanner.lineStarts);
     return result;
@@ -1271,8 +1249,8 @@ class ScannerTest_ExpectedLocation {
 
   final int _columnNumber;
 
-  ScannerTest_ExpectedLocation(this._offset, this._lineNumber,
-      this._columnNumber);
+  ScannerTest_ExpectedLocation(
+      this._offset, this._lineNumber, this._columnNumber);
 }
 
 /**

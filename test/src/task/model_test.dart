@@ -27,19 +27,15 @@ class AnalysisTaskTest extends EngineTestCase {
   test_getRequiredInput_missingKey() {
     AnalysisTarget target = new TestSource();
     AnalysisTask task = new TestAnalysisTask(null, target);
-    task.inputs = {
-      'a': 'b'
-    };
-    expect(
-        () => task.getRequiredInput('c'),
+    task.inputs = {'a': 'b'};
+    expect(() => task.getRequiredInput('c'),
         throwsA(new isInstanceOf<AnalysisException>()));
   }
 
   test_getRequiredInput_noInputs() {
     AnalysisTarget target = new TestSource();
     AnalysisTask task = new TestAnalysisTask(null, target);
-    expect(
-        () => task.getRequiredInput('x'),
+    expect(() => task.getRequiredInput('x'),
         throwsA(new isInstanceOf<AnalysisException>()));
   }
 
@@ -48,9 +44,7 @@ class AnalysisTaskTest extends EngineTestCase {
     AnalysisTask task = new TestAnalysisTask(null, target);
     String key = 'a';
     String value = 'b';
-    task.inputs = {
-      key: value
-    };
+    task.inputs = {key: value};
     expect(task.getRequiredInput(key), value);
   }
 
@@ -64,7 +58,7 @@ class AnalysisTaskTest extends EngineTestCase {
 @reflectiveTest
 class ContributionPointImplTest extends EngineTestCase {
   test_contributors_empty() {
-    ContributionPointImpl point = new ContributionPointImpl('point');
+    CompositeResultDescriptorImpl point = new CompositeResultDescriptorImpl('point');
     List<ResultDescriptor> contributors = point.contributors;
     expect(contributors, isEmpty);
   }
@@ -72,7 +66,7 @@ class ContributionPointImplTest extends EngineTestCase {
   test_contributors_nonEmpty() {
     ResultDescriptorImpl result1 = new ResultDescriptorImpl('result1', null);
     ResultDescriptorImpl result2 = new ResultDescriptorImpl('result2', null);
-    ContributionPointImpl point = new ContributionPointImpl('point');
+    CompositeResultDescriptorImpl point = new CompositeResultDescriptorImpl('point');
     point.recordContributor(result1);
     point.recordContributor(result2);
     List<ResultDescriptor> contributors = point.contributors;
@@ -85,12 +79,12 @@ class ContributionPointImplTest extends EngineTestCase {
   }
 
   test_create() {
-    expect(new ContributionPointImpl('name'), isNotNull);
+    expect(new CompositeResultDescriptorImpl('name'), isNotNull);
   }
 
   test_name() {
     String name = 'point';
-    ContributionPointImpl point = new ContributionPointImpl(name);
+    CompositeResultDescriptorImpl point = new CompositeResultDescriptorImpl(name);
     expect(point.name, name);
   }
 }
@@ -98,7 +92,7 @@ class ContributionPointImplTest extends EngineTestCase {
 @reflectiveTest
 class ResultDescriptorImplTest extends EngineTestCase {
   test_create_withContribution() {
-    ContributionPointImpl point = new ContributionPointImpl('point');
+    CompositeResultDescriptorImpl point = new CompositeResultDescriptorImpl('point');
     ResultDescriptorImpl result =
         new ResultDescriptorImpl('result', null, contributesTo: point);
     expect(result, isNotNull);
@@ -113,7 +107,7 @@ class ResultDescriptorImplTest extends EngineTestCase {
   test_inputFor() {
     AnalysisTarget target = new TestSource();
     ResultDescriptorImpl result = new ResultDescriptorImpl('result', null);
-    TaskInput input = result.inputFor(target);
+    TaskInput input = result.of(target);
     expect(input, isNotNull);
   }
 
