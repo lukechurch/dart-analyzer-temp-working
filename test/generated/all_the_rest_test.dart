@@ -931,10 +931,11 @@ class ConstantFinderTest extends EngineTestCase {
     return constructorInvocations;
   }
 
-  Map<VariableElement, VariableDeclaration> _findVariableDeclarations() {
+  Map<PotentiallyConstVariableElement, VariableDeclaration> _findVariableDeclarations() {
     ConstantFinder finder = new ConstantFinder();
     _node.accept(finder);
-    Map<VariableElement, VariableDeclaration> variableMap = finder.variableMap;
+    Map<PotentiallyConstVariableElement, VariableDeclaration> variableMap =
+        finder.variableMap;
     expect(variableMap, isNotNull);
     return variableMap;
   }
@@ -7450,8 +7451,9 @@ $scriptBody
     ht.Token token = scanner.tokenize();
     LineInfo lineInfo = new LineInfo(scanner.lineStarts);
     GatheringErrorListener errorListener = new GatheringErrorListener();
+    AnalysisOptionsImpl options = new AnalysisOptionsImpl();
     ht.HtmlUnit unit =
-        new ht.HtmlParser(null, errorListener).parse(token, lineInfo);
+        new ht.HtmlParser(null, errorListener, options).parse(token, lineInfo);
     errorListener.assertNoErrors();
     return unit;
   }
@@ -7847,7 +7849,7 @@ class MockDartSdk implements DartSdk {
 @reflectiveTest
 class ReferenceFinderTest extends EngineTestCase {
   DirectedGraph<AstNode> _referenceGraph;
-  Map<VariableElement, VariableDeclaration> _variableDeclarationMap;
+  Map<PotentiallyConstVariableElement, VariableDeclaration> _variableDeclarationMap;
   Map<ConstructorElement, ConstructorDeclaration> _constructorDeclarationMap;
   VariableDeclaration _head;
   AstNode _tail;
@@ -7855,7 +7857,7 @@ class ReferenceFinderTest extends EngineTestCase {
   void setUp() {
     _referenceGraph = new DirectedGraph<AstNode>();
     _variableDeclarationMap =
-        new HashMap<VariableElement, VariableDeclaration>();
+        new HashMap<PotentiallyConstVariableElement, VariableDeclaration>();
     _constructorDeclarationMap =
         new HashMap<ConstructorElement, ConstructorDeclaration>();
     _head = AstFactory.variableDeclaration("v1");
@@ -7978,8 +7980,8 @@ class ReferenceFinderTest extends EngineTestCase {
     VariableDeclaration variableDeclaration =
         AstFactory.variableDeclaration(name);
     _tail = variableDeclaration;
-    VariableElementImpl variableElement =
-        ElementFactory.localVariableElement2(name);
+    ConstLocalVariableElementImpl variableElement =
+        ElementFactory.constLocalVariableElement(name);
     variableElement.const3 = isConst;
     AstFactory.variableDeclarationList2(
         isConst ? Keyword.CONST : Keyword.VAR, [variableDeclaration]);

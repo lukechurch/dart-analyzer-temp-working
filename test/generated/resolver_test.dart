@@ -365,6 +365,8 @@ class AnalysisContextForTests extends AnalysisContextImpl {
         currentOptions.dart2jsHint != options.dart2jsHint ||
         (currentOptions.hint && !options.hint) ||
         currentOptions.preserveComments != options.preserveComments ||
+        currentOptions.enableNullAwareOperators !=
+            options.enableNullAwareOperators ||
         currentOptions.enableStrictCallChecks != options.enableStrictCallChecks;
     if (needsRecompute) {
       fail(
@@ -4213,6 +4215,21 @@ main() {
   }
 }
 print(x) {}''');
+    resolve(source);
+    assertErrors(source);
+    verify([source]);
+  }
+
+  void test_unusedLocalVariable_inFor_underscore_ignored() {
+    enableUnusedLocalVariable = true;
+    Source source = addSource(r'''
+main() {
+  for (var _ in [1,2,3]) {
+    for (var __ in [4,5,6]) {
+      // do something
+    }
+  }
+}''');
     resolve(source);
     assertErrors(source);
     verify([source]);
@@ -9875,6 +9892,24 @@ class StaticTypeAnalyzerTest extends EngineTestCase {
     _listener.assertNoErrors();
   }
 
+  void test_visitAssignmentExpression_compoundIfNull_differentTypes() {
+    // double d; d ??= 0
+    Expression node = AstFactory.assignmentExpression(
+        _resolvedVariable(_typeProvider.doubleType, 'd'),
+        TokenType.QUESTION_QUESTION_EQ, _resolvedInteger(0));
+    expect(_analyze(node), same(_typeProvider.numType));
+    _listener.assertNoErrors();
+  }
+
+  void test_visitAssignmentExpression_compoundIfNull_sameTypes() {
+    // int i; i ??= 0
+    Expression node = AstFactory.assignmentExpression(
+        _resolvedVariable(_typeProvider.intType, 'i'),
+        TokenType.QUESTION_QUESTION_EQ, _resolvedInteger(0));
+    expect(_analyze(node), same(_typeProvider.intType));
+    _listener.assertNoErrors();
+  }
+
   void test_visitAssignmentExpression_simple() {
     // i = 0
     InterfaceType intType = _typeProvider.intType;
@@ -9913,6 +9948,14 @@ class StaticTypeAnalyzerTest extends EngineTestCase {
     Expression node = AstFactory.binaryExpression(
         _resolvedInteger(2), TokenType.EQ_EQ, _resolvedInteger(3));
     expect(_analyze(node), same(_typeProvider.boolType));
+    _listener.assertNoErrors();
+  }
+
+  void test_visitBinaryExpression_ifNull() {
+    // 1 ?? 1.5
+    Expression node = AstFactory.binaryExpression(
+        _resolvedInteger(1), TokenType.QUESTION_QUESTION, _resolvedDouble(1.5));
+    expect(_analyze(node), same(_typeProvider.numType));
     _listener.assertNoErrors();
   }
 
@@ -12750,14 +12793,22 @@ f() {
   }
 
   void test_mergePropagatedTypes_afterIfThen_different() {
-    _assertTypeOfMarkedExpression(r'''
+    String code = r'''
 main() {
   var v = 0;
   if (v != null) {
     v = '';
   }
-  return v; // marker
-}''', null, null);
+  return v;
+}''';
+    {
+      SimpleIdentifier identifier = _findMarkedIdentifier(code, "v;");
+      expect(identifier.propagatedType, null);
+    }
+    {
+      SimpleIdentifier identifier = _findMarkedIdentifier(code, "v = '';");
+      expect(identifier.propagatedType, typeProvider.stringType);
+    }
   }
 
   void test_mergePropagatedTypes_afterIfThen_same() {

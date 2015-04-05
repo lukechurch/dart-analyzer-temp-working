@@ -2846,6 +2846,14 @@ class ElementBuilder extends RecursiveAstVisitor<Object> {
   }
 
   @override
+  Object visitInstanceCreationExpression(InstanceCreationExpression node) {
+    if (node.isConst) {
+      node.constantHandle = new ConstantInstanceCreationHandle();
+    }
+    return super.visitInstanceCreationExpression(node);
+  }
+
+  @override
   Object visitLabeledStatement(LabeledStatement node) {
     bool onSwitchStatement = node.statement is SwitchStatement;
     for (Label label in node.labels) {
@@ -3064,17 +3072,15 @@ class ElementBuilder extends RecursiveAstVisitor<Object> {
       SimpleIdentifier variableName = node.name;
       LocalVariableElementImpl variable;
       if (isConst && hasInitializer) {
-        variable = new ConstLocalVariableElementImpl(variableName);
+        variable = new ConstLocalVariableElementImpl.forNode(variableName);
       } else {
         variable = new LocalVariableElementImpl.forNode(variableName);
       }
       element = variable;
       Block enclosingBlock = node.getAncestor((node) => node is Block);
-      int functionEnd = node.offset + node.length;
-      int blockEnd = enclosingBlock.offset + enclosingBlock.length;
       // TODO(brianwilkerson) This isn't right for variables declared in a for
       // loop.
-      variable.setVisibleRange(functionEnd, blockEnd - functionEnd - 1);
+      variable.setVisibleRange(enclosingBlock.offset, enclosingBlock.length);
       _currentHolder.addLocalVariable(variable);
       variableName.staticElement = element;
     } else {
@@ -4344,6 +4350,159 @@ class FunctionTypeScope extends EnclosedScope {
 }
 
 /**
+ * An [AstVisitor] that fills [UsedElements].
+ */
+class GatherUsedElementsVisitor extends RecursiveAstVisitor {
+  final UsedElements usedElements = new UsedElements();
+
+  final LibraryElement _enclosingLibrary;
+  ClassElement _enclosingClass;
+  ExecutableElement _enclosingExec;
+
+  GatherUsedElementsVisitor(this._enclosingLibrary);
+
+  @override
+  visitCatchClause(CatchClause node) {
+    SimpleIdentifier exceptionParameter = node.exceptionParameter;
+    SimpleIdentifier stackTraceParameter = node.stackTraceParameter;
+    if (exceptionParameter != null) {
+      Element element = exceptionParameter.staticElement;
+      usedElements.addCatchException(element);
+      if (stackTraceParameter != null || node.onKeyword == null) {
+        usedElements.addElement(element);
+      }
+    }
+    if (stackTraceParameter != null) {
+      Element element = stackTraceParameter.staticElement;
+      usedElements.addCatchStackTrace(element);
+    }
+    super.visitCatchClause(node);
+  }
+
+  @override
+  visitClassDeclaration(ClassDeclaration node) {
+    ClassElement enclosingClassOld = _enclosingClass;
+    try {
+      _enclosingClass = node.element;
+      super.visitClassDeclaration(node);
+    } finally {
+      _enclosingClass = enclosingClassOld;
+    }
+  }
+
+  @override
+  visitFunctionDeclaration(FunctionDeclaration node) {
+    ExecutableElement enclosingExecOld = _enclosingExec;
+    try {
+      _enclosingExec = node.element;
+      super.visitFunctionDeclaration(node);
+    } finally {
+      _enclosingExec = enclosingExecOld;
+    }
+  }
+
+  @override
+  visitFunctionExpression(FunctionExpression node) {
+    if (node.parent is! FunctionDeclaration) {
+      usedElements.addElement(node.element);
+    }
+    super.visitFunctionExpression(node);
+  }
+
+  @override
+  visitMethodDeclaration(MethodDeclaration node) {
+    ExecutableElement enclosingExecOld = _enclosingExec;
+    try {
+      _enclosingExec = node.element;
+      super.visitMethodDeclaration(node);
+    } finally {
+      _enclosingExec = enclosingExecOld;
+    }
+  }
+
+  @override
+  visitSimpleIdentifier(SimpleIdentifier node) {
+    if (node.inDeclarationContext()) {
+      return;
+    }
+    Element element = node.staticElement;
+    bool isIdentifierRead = _isReadIdentifier(node);
+    if (element is LocalVariableElement) {
+      if (isIdentifierRead) {
+        usedElements.addElement(element);
+      }
+    } else {
+      _useIdentifierElement(node);
+      if (element == null ||
+          element is! LocalElement && !identical(element, _enclosingExec)) {
+        usedElements.members.add(node.name);
+        if (isIdentifierRead) {
+          usedElements.readMembers.add(node.name);
+        }
+      }
+    }
+  }
+
+  @override
+  visitTypeName(TypeName node) {
+    _useIdentifierElement(node.name);
+  }
+
+  /**
+   * Marks an [Element] of [node] as used in the library.
+   */
+  void _useIdentifierElement(Identifier node) {
+    Element element = node.staticElement;
+    if (element == null) {
+      return;
+    }
+    // check if a local element
+    if (!identical(element.library, _enclosingLibrary)) {
+      return;
+    }
+    // ignore references to an element from itself
+    if (identical(element, _enclosingClass)) {
+      return;
+    }
+    if (identical(element, _enclosingExec)) {
+      return;
+    }
+    // ignore places where the element is not actually used
+    if (node.parent is TypeName) {
+      AstNode parent2 = node.parent.parent;
+      if (parent2 is IsExpression) {
+        return;
+      }
+      if (parent2 is VariableDeclarationList) {
+        return;
+      }
+    }
+    // OK
+    usedElements.addElement(element);
+  }
+
+  static bool _isReadIdentifier(SimpleIdentifier node) {
+    // not reading at all
+    if (!node.inGetterContext()) {
+      return false;
+    }
+    // check if useless reading
+    AstNode parent = node.parent;
+    if (parent.parent is ExpressionStatement &&
+        (parent is PrefixExpression ||
+            parent is PostfixExpression ||
+            parent is AssignmentExpression && parent.leftHandSide == node)) {
+      // v++;
+      // ++v;
+      // v += 2;
+      return false;
+    }
+    // OK
+    return true;
+  }
+}
+
+/**
  * Instances of the class `HintGenerator` traverse a library's worth of dart code at a time to
  * generate hints over the set of sources.
  *
@@ -4367,14 +4526,14 @@ class HintGenerator {
    */
   InheritanceManager _manager;
 
-  _GatherUsedElementsVisitor _usedElementsVisitor;
+  GatherUsedElementsVisitor _usedElementsVisitor;
 
   HintGenerator(this._compilationUnits, this._context, this._errorListener) {
     _library = _compilationUnits[0].element.library;
     _importsVerifier = new ImportsVerifier(_library);
     _enableDart2JSHints = _context.analysisOptions.dart2jsHint;
     _manager = new InheritanceManager(_compilationUnits[0].element.library);
-    _usedElementsVisitor = new _GatherUsedElementsVisitor(_library);
+    _usedElementsVisitor = new GatherUsedElementsVisitor(_library);
   }
 
   void generateForLibrary() {
@@ -4397,7 +4556,7 @@ class HintGenerator {
           .generateDuplicateImportHints(definingCompilationUnitErrorReporter);
       _importsVerifier
           .generateUnusedImportHints(definingCompilationUnitErrorReporter);
-      _library.accept(new _UnusedElementsVerifier(
+      _library.accept(new UnusedElementsVerifier(
           _errorListener, _usedElementsVisitor.usedElements));
     });
   }
@@ -4415,7 +4574,7 @@ class HintGenerator {
     // Dart best practices
     unit.accept(
         new BestPracticesVerifier(errorReporter, _context.typeProvider));
-    unit.accept(new OverrideVerifier(_manager, errorReporter));
+    unit.accept(new OverrideVerifier(errorReporter, _manager));
     // Find to-do comments
     new ToDoFinder(errorReporter).findIn(unit);
     // pub analysis
@@ -9494,22 +9653,22 @@ class NamespaceBuilder {
  */
 class OverrideVerifier extends RecursiveAstVisitor<Object> {
   /**
-   * The inheritance manager used to find overridden methods.
-   */
-  final InheritanceManager _manager;
-
-  /**
    * The error reporter used to report errors.
    */
   final ErrorReporter _errorReporter;
 
   /**
+   * The inheritance manager used to find overridden methods.
+   */
+  final InheritanceManager _manager;
+
+  /**
    * Initialize a newly created verifier to look for inappropriate uses of the override annotation.
    *
-   * @param manager the inheritance manager used to find overridden methods
    * @param errorReporter the error reporter used to report errors
+   * @param manager the inheritance manager used to find overridden methods
    */
-  OverrideVerifier(this._manager, this._errorReporter);
+  OverrideVerifier(this._errorReporter, this._manager);
 
   @override
   Object visitMethodDeclaration(MethodDeclaration node) {
@@ -10335,7 +10494,9 @@ class ResolverVisitor extends ScopedVisitor {
       Expression expression, DartType potentialType, bool allowPrecisionLoss) {
     VariableElement element = getOverridableStaticElement(expression);
     if (element != null) {
-      overrideVariable(element, potentialType, allowPrecisionLoss);
+      DartType newBestType =
+          overrideVariable(element, potentialType, allowPrecisionLoss);
+      recordPropagatedTypeIfBetter(expression, newBestType);
     }
     element = getOverridablePropagatedElement(expression);
     if (element != null) {
@@ -10351,16 +10512,19 @@ class ResolverVisitor extends ScopedVisitor {
    * @param potentialType the potential type of the element
    * @param allowPrecisionLoss true if `potentialType` is allowed to be less precise than the
    *          current best type
+   *
+   * Return a new better [DartType], or `null` if [potentialType] is not better
+   * than the current [element] type.
    */
-  void overrideVariable(VariableElement element, DartType potentialType,
+  DartType overrideVariable(VariableElement element, DartType potentialType,
       bool allowPrecisionLoss) {
     if (potentialType == null || potentialType.isBottom) {
-      return;
+      return null;
     }
     DartType currentType = _overrideManager.getBestType(element);
 
     if (potentialType == currentType) {
-      return;
+      return null;
     }
 
     // If we aren't allowing precision loss then the third and fourth conditions
@@ -10399,7 +10563,44 @@ class ResolverVisitor extends ScopedVisitor {
 //            potentialType;
 //      }
       _overrideManager.setType(element, potentialType);
+      return potentialType;
     }
+    return null;
+  }
+
+  /**
+   * If the given [type] is valid, strongly more specific than the
+   * existing static type of the given [expression], record it as a propagated
+   * type of the given [expression]. Otherwise, reset it to `null`.
+   *
+   * If [hasOldPropagatedType] is `true` then the existing propagated type
+   * should also is checked.
+   */
+  void recordPropagatedTypeIfBetter(Expression expression, DartType type,
+      [bool hasOldPropagatedType = false]) {
+    // Ensure that propagated type invalid.
+    if (type == null || type.isDynamic || type.isBottom) {
+      if (!hasOldPropagatedType) {
+        expression.propagatedType = null;
+      }
+      return;
+    }
+    // Ensure that propagated type is more specific than the static type.
+    DartType staticType = expression.staticType;
+    if (type == staticType || !type.isMoreSpecificThan(staticType)) {
+      expression.propagatedType = null;
+      return;
+    }
+    // Ensure that the new propagated type is more specific than the old one.
+    if (hasOldPropagatedType) {
+      DartType oldPropagatedType = expression.propagatedType;
+      if (oldPropagatedType != null &&
+          !type.isMoreSpecificThan(oldPropagatedType)) {
+        return;
+      }
+    }
+    // OK
+    expression.propagatedType = type;
   }
 
   @override
@@ -10674,6 +10875,9 @@ class ResolverVisitor extends ScopedVisitor {
     } finally {
       _enclosingFunction = outerFunction;
     }
+    ConstructorElementImpl constructor = node.element;
+    constructor.constantInitializers =
+        new ConstantAstCloner().cloneNodeList(node.initializers);
     return null;
   }
 
@@ -11116,6 +11320,16 @@ class ResolverVisitor extends ScopedVisitor {
   Object visitTypeName(TypeName node) => null;
 
   @override
+  Object visitVariableDeclaration(VariableDeclaration node) {
+    super.visitVariableDeclaration(node);
+    if (node.element.isConst && node.initializer != null) {
+      (node.element as ConstVariableElement).constantInitializer =
+          new ConstantAstCloner().cloneNode(node.initializer);
+    }
+    return null;
+  }
+
+  @override
   Object visitWhileStatement(WhileStatement node) {
     // Note: since we don't call the base class, we have to maintain
     // _implicitLabelScope ourselves.
@@ -11382,7 +11596,7 @@ class ResolverVisitor extends ScopedVisitor {
     VariableElement element = getPromotionStaticElement(expression);
     if (element != null) {
       // may be mutated somewhere in closure
-      if ((element as VariableElementImpl).isPotentiallyMutatedInClosure) {
+      if (element.isPotentiallyMutatedInClosure) {
         return;
       }
       // prepare current variable type
@@ -14736,6 +14950,232 @@ class TypeResolverVisitor extends ScopedVisitor {
 }
 
 /**
+ * Instances of the class [UnusedElementsVerifier] traverse an element
+ * structure looking for cases of [HintCode.UNUSED_ELEMENT] and
+ * [HintCode.UNUSED_LOCAL_VARIABLE].
+ */
+class UnusedElementsVerifier extends RecursiveElementVisitor {
+  /**
+   * The error listener to which errors will be reported.
+   */
+  final AnalysisErrorListener _errorListener;
+
+  /**
+   * The elements know to be used.
+   */
+  final UsedElements _usedElements;
+
+  /**
+   * Create a new instance of the [UnusedElementsVerifier].
+   */
+  UnusedElementsVerifier(this._errorListener, this._usedElements);
+
+  @override
+  visitClassElement(ClassElement element) {
+    if (!_isUsedElement(element)) {
+      _reportErrorForElement(HintCode.UNUSED_ELEMENT, element, [
+        element.kind.displayName,
+        element.displayName
+      ]);
+    }
+    super.visitClassElement(element);
+  }
+
+  @override
+  visitFieldElement(FieldElement element) {
+    if (!_isReadMember(element)) {
+      _reportErrorForElement(
+          HintCode.UNUSED_FIELD, element, [element.displayName]);
+    }
+    super.visitFieldElement(element);
+  }
+
+  @override
+  visitFunctionElement(FunctionElement element) {
+    if (!_isUsedElement(element)) {
+      _reportErrorForElement(HintCode.UNUSED_ELEMENT, element, [
+        element.kind.displayName,
+        element.displayName
+      ]);
+    }
+    super.visitFunctionElement(element);
+  }
+
+  @override
+  visitLocalVariableElement(LocalVariableElement element) {
+    if (!_isUsedElement(element) && !_isNamedUnderscore(element)) {
+      HintCode errorCode;
+      if (_usedElements.isCatchException(element)) {
+        errorCode = HintCode.UNUSED_CATCH_CLAUSE;
+      } else if (_usedElements.isCatchStackTrace(element)) {
+        errorCode = HintCode.UNUSED_CATCH_STACK;
+      } else {
+        errorCode = HintCode.UNUSED_LOCAL_VARIABLE;
+      }
+      _reportErrorForElement(errorCode, element, [element.displayName]);
+    }
+  }
+
+  @override
+  visitMethodElement(MethodElement element) {
+    if (!_isUsedMember(element)) {
+      _reportErrorForElement(HintCode.UNUSED_ELEMENT, element, [
+        element.kind.displayName,
+        element.displayName
+      ]);
+    }
+    super.visitMethodElement(element);
+  }
+
+  @override
+  visitPropertyAccessorElement(PropertyAccessorElement element) {
+    if (!_isUsedMember(element)) {
+      _reportErrorForElement(HintCode.UNUSED_ELEMENT, element, [
+        element.kind.displayName,
+        element.displayName
+      ]);
+    }
+    super.visitPropertyAccessorElement(element);
+  }
+
+  bool _isNamedUnderscore(LocalVariableElement element) {
+    String name = element.name;
+    if (name != null) {
+      for (int index = name.length - 1; index >= 0; --index) {
+        if (name.codeUnitAt(index) != 0x5F) {
+          // 0x5F => '_'
+          return false;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  bool _isReadMember(Element element) {
+    if (element.isPublic) {
+      return true;
+    }
+    if (element.isSynthetic) {
+      return true;
+    }
+    return _usedElements.readMembers.contains(element.displayName);
+  }
+
+  bool _isUsedElement(Element element) {
+    if (element.isSynthetic) {
+      return true;
+    }
+    if (element is LocalVariableElement ||
+        element is FunctionElement && !element.isStatic) {
+      // local variable or function
+    } else {
+      if (element.isPublic) {
+        return true;
+      }
+    }
+    return _usedElements.elements.contains(element);
+  }
+
+  bool _isUsedMember(Element element) {
+    if (element.isPublic) {
+      return true;
+    }
+    if (element.isSynthetic) {
+      return true;
+    }
+    if (_usedElements.members.contains(element.displayName)) {
+      return true;
+    }
+    return _usedElements.elements.contains(element);
+  }
+
+  void _reportErrorForElement(
+      ErrorCode errorCode, Element element, List<Object> arguments) {
+    if (element != null) {
+      _errorListener.onError(new AnalysisError.con2(element.source,
+          element.nameOffset, element.displayName.length, errorCode,
+          arguments));
+    }
+  }
+}
+
+/**
+ * A container with sets of used [Element]s.
+ */
+class UsedElements {
+  /**
+   * Resolved, locally defined elements that are used or potentially can be
+   * used.
+   */
+  final HashSet<Element> elements = new HashSet<Element>();
+
+  /**
+   * [LocalVariableElement]s that represent exceptions in [CatchClause]s.
+   */
+  final HashSet<LocalVariableElement> catchExceptionElements =
+      new HashSet<LocalVariableElement>();
+
+  /**
+   * [LocalVariableElement]s that represent stack traces in [CatchClause]s.
+   */
+  final HashSet<LocalVariableElement> catchStackTraceElements =
+      new HashSet<LocalVariableElement>();
+
+  /**
+   * Names of resolved or unresolved class members that are referenced in the
+   * library.
+   */
+  final HashSet<String> members = new HashSet<String>();
+
+  /**
+   * Names of resolved or unresolved class members that are read in the
+   * library.
+   */
+  final HashSet<String> readMembers = new HashSet<String>();
+
+  UsedElements();
+
+  factory UsedElements.merge(List<UsedElements> parts) {
+    UsedElements result = new UsedElements();
+    for (UsedElements part in parts) {
+      result.elements.addAll(part.elements);
+      result.catchExceptionElements.addAll(part.catchExceptionElements);
+      result.catchStackTraceElements.addAll(part.catchStackTraceElements);
+      result.members.addAll(part.members);
+      result.readMembers.addAll(part.readMembers);
+    }
+    return result;
+  }
+
+  void addCatchException(LocalVariableElement element) {
+    if (element != null) {
+      catchExceptionElements.add(element);
+    }
+  }
+
+  void addCatchStackTrace(LocalVariableElement element) {
+    if (element != null) {
+      catchStackTraceElements.add(element);
+    }
+  }
+
+  void addElement(Element element) {
+    if (element != null) {
+      elements.add(element);
+    }
+  }
+
+  bool isCatchException(LocalVariableElement element) {
+    return catchExceptionElements.contains(element);
+  }
+
+  bool isCatchStackTrace(LocalVariableElement element) {
+    return catchStackTraceElements.contains(element);
+  }
+}
+
+/**
  * Instances of the class `VariableResolverVisitor` are used to resolve
  * [SimpleIdentifier]s to local variables and formal parameters.
  */
@@ -14961,179 +15401,6 @@ class _ElementBuilder_visitClassDeclaration extends UnifyingAstVisitor<Object> {
   Object visitNode(AstNode node) => node.accept(builder);
 }
 
-class _GatherUsedElementsVisitor extends RecursiveAstVisitor {
-  final _UsedElements usedElements = new _UsedElements();
-
-  final LibraryElement _enclosingLibrary;
-  ClassElement _enclosingClass;
-  ExecutableElement _enclosingExec;
-
-  _GatherUsedElementsVisitor(this._enclosingLibrary);
-
-  @override
-  visitCatchClause(CatchClause node) {
-    SimpleIdentifier exceptionParameter = node.exceptionParameter;
-    SimpleIdentifier stackTraceParameter = node.stackTraceParameter;
-    if (exceptionParameter != null) {
-      Element element = exceptionParameter.staticElement;
-      usedElements.addCatchException(element);
-      if (stackTraceParameter != null || node.onKeyword == null) {
-        _useElement(element);
-      }
-    }
-    if (stackTraceParameter != null) {
-      Element element = stackTraceParameter.staticElement;
-      usedElements.addCatchStackTrace(element);
-    }
-    super.visitCatchClause(node);
-  }
-
-  @override
-  visitClassDeclaration(ClassDeclaration node) {
-    ClassElement enclosingClassOld = _enclosingClass;
-    try {
-      _enclosingClass = node.element;
-      super.visitClassDeclaration(node);
-    } finally {
-      _enclosingClass = enclosingClassOld;
-    }
-  }
-
-  @override
-  visitFunctionDeclaration(FunctionDeclaration node) {
-    ExecutableElement enclosingExecOld = _enclosingExec;
-    try {
-      _enclosingExec = node.element;
-      super.visitFunctionDeclaration(node);
-    } finally {
-      _enclosingExec = enclosingExecOld;
-    }
-  }
-
-  @override
-  visitFunctionExpression(FunctionExpression node) {
-    if (node.parent is! FunctionDeclaration) {
-      _useElement(node.element);
-    }
-    super.visitFunctionExpression(node);
-  }
-
-  @override
-  visitMethodDeclaration(MethodDeclaration node) {
-    ExecutableElement enclosingExecOld = _enclosingExec;
-    try {
-      _enclosingExec = node.element;
-      super.visitMethodDeclaration(node);
-    } finally {
-      _enclosingExec = enclosingExecOld;
-    }
-  }
-
-  @override
-  visitSimpleIdentifier(SimpleIdentifier node) {
-    if (node.inDeclarationContext()) {
-      return;
-    }
-    Element element = node.staticElement;
-    bool isIdentifierRead = _isReadIdentifier(node);
-    if (element is LocalVariableElement) {
-      if (isIdentifierRead) {
-        _useElement(element);
-      }
-//    } else if (element is PropertyAccessorElement &&
-//        element.isSynthetic &&
-//        element.isPrivate) {
-//      PropertyInducingElement variable = element.variable;
-//      if (node.inGetterContext()) {
-//        AstNode parent = node.parent;
-//        if (parent.parent is ExpressionStatement &&
-//            (parent is PrefixExpression ||
-//             parent is PostfixExpression ||
-//             parent is AssignmentExpression && parent.leftHandSide == node)) {
-//          // f++;
-//          // ++f;
-//          // f += 2;
-//        } else {
-//          _useElement(variable);
-//        }
-//      }
-    } else {
-      _useIdentifierElement(node);
-      if (element == null ||
-          element is! LocalElement && !identical(element, _enclosingExec)) {
-        usedElements.members.add(node.name);
-        if (isIdentifierRead) {
-          usedElements.readMembers.add(node.name);
-        }
-      }
-    }
-  }
-
-  @override
-  visitTypeName(TypeName node) {
-    _useIdentifierElement(node.name);
-  }
-
-  _useElement(Element element) {
-    if (element != null) {
-      usedElements.elements.add(element);
-    }
-  }
-
-  /**
-   * Marks an [Element] of [node] as used in the library.
-   */
-  void _useIdentifierElement(Identifier node) {
-    Element element = node.staticElement;
-    if (element == null) {
-      return;
-    }
-    // check if a local element
-    if (!identical(element.library, _enclosingLibrary)) {
-      return;
-    }
-    // ignore references to an element from itself
-    if (identical(element, _enclosingClass)) {
-      return;
-    }
-    if (identical(element, _enclosingExec)) {
-      return;
-    }
-    // ignore places where the element is not actually used
-    if (node.parent is TypeName) {
-      AstNode parent2 = node.parent.parent;
-      if (parent2 is IsExpression) {
-        return;
-      }
-      if (parent2 is VariableDeclarationList) {
-        return;
-      }
-    }
-    // OK
-    _useElement(element);
-  }
-
-  static bool _isReadIdentifier(SimpleIdentifier node) {
-    // not reading at all
-    if (!node.inGetterContext()) {
-      return false;
-    }
-    // check if useless reading
-    AstNode parent = node.parent;
-    if (parent.parent is ExpressionStatement &&
-        (parent is PrefixExpression ||
-            parent is PostfixExpression ||
-            parent is AssignmentExpression && parent.leftHandSide == node)) {
-      // v++;
-      // ++v;
-      // v += 2;
-      return false;
-    }
-    // OK
-    return true;
-  }
-}
-
 class _ResolverVisitor_isVariableAccessedInClosure
     extends RecursiveAstVisitor<Object> {
   final Element variable;
@@ -15222,193 +15489,4 @@ class _TypeResolverVisitor_visitClassMembersInScope
 
   @override
   Object visitWithClause(WithClause node) => null;
-}
-
-/**
- * Instances of the class [_UnusedElementsVerifier] traverse an element
- * structure looking for cases of [HintCode.UNUSED_ELEMENT] and
- * [HintCode.UNUSED_LOCAL_VARIABLE].
- */
-class _UnusedElementsVerifier extends RecursiveElementVisitor {
-  /**
-   * The error listener to which errors will be reported.
-   */
-  final AnalysisErrorListener _errorListener;
-
-  /**
-   * The elements know to be used.
-   */
-  final _UsedElements _usedElements;
-
-  /**
-   * Create a new instance of the [_UnusedElementsVerifier].
-   */
-  _UnusedElementsVerifier(this._errorListener, this._usedElements);
-
-  @override
-  visitClassElement(ClassElement element) {
-    if (!_isUsedElement(element)) {
-      _reportErrorForElement(HintCode.UNUSED_ELEMENT, element, [
-        element.kind.displayName,
-        element.displayName
-      ]);
-    }
-    super.visitClassElement(element);
-  }
-
-  @override
-  visitFieldElement(FieldElement element) {
-    if (!_isReadMember(element)) {
-      _reportErrorForElement(
-          HintCode.UNUSED_FIELD, element, [element.displayName]);
-    }
-    super.visitFieldElement(element);
-  }
-
-  @override
-  visitFunctionElement(FunctionElement element) {
-    if (!_isUsedElement(element)) {
-      _reportErrorForElement(HintCode.UNUSED_ELEMENT, element, [
-        element.kind.displayName,
-        element.displayName
-      ]);
-    }
-    super.visitFunctionElement(element);
-  }
-
-  @override
-  visitLocalVariableElement(LocalVariableElement element) {
-    if (!_isUsedElement(element)) {
-      HintCode errorCode;
-      if (_usedElements.isCatchException(element)) {
-        errorCode = HintCode.UNUSED_CATCH_CLAUSE;
-      } else if (_usedElements.isCatchStackTrace(element)) {
-        errorCode = HintCode.UNUSED_CATCH_STACK;
-      } else {
-        errorCode = HintCode.UNUSED_LOCAL_VARIABLE;
-      }
-      _reportErrorForElement(errorCode, element, [element.displayName]);
-    }
-  }
-
-  @override
-  visitMethodElement(MethodElement element) {
-    if (!_isUsedMember(element)) {
-      _reportErrorForElement(HintCode.UNUSED_ELEMENT, element, [
-        element.kind.displayName,
-        element.displayName
-      ]);
-    }
-    super.visitMethodElement(element);
-  }
-
-  @override
-  visitPropertyAccessorElement(PropertyAccessorElement element) {
-    if (!_isUsedMember(element)) {
-      _reportErrorForElement(HintCode.UNUSED_ELEMENT, element, [
-        element.kind.displayName,
-        element.displayName
-      ]);
-    }
-    super.visitPropertyAccessorElement(element);
-  }
-
-  bool _isReadMember(Element element) {
-    if (element.isPublic) {
-      return true;
-    }
-    if (element.isSynthetic) {
-      return true;
-    }
-    return _usedElements.readMembers.contains(element.displayName);
-  }
-
-  bool _isUsedElement(Element element) {
-    if (element.isSynthetic) {
-      return true;
-    }
-    if (element is LocalVariableElement ||
-        element is FunctionElement && !element.isStatic) {
-      // local variable or function
-    } else {
-      if (element.isPublic) {
-        return true;
-      }
-    }
-    return _usedElements.elements.contains(element);
-  }
-
-  bool _isUsedMember(Element element) {
-    if (element.isPublic) {
-      return true;
-    }
-    if (element.isSynthetic) {
-      return true;
-    }
-    if (_usedElements.members.contains(element.displayName)) {
-      return true;
-    }
-    return _usedElements.elements.contains(element);
-  }
-
-  void _reportErrorForElement(
-      ErrorCode errorCode, Element element, List<Object> arguments) {
-    if (element != null) {
-      _errorListener.onError(new AnalysisError.con2(element.source,
-          element.nameOffset, element.displayName.length, errorCode,
-          arguments));
-    }
-  }
-}
-
-class _UsedElements {
-  /**
-   * Resolved, locally defined elements that are used or potentially can be
-   * used.
-   */
-  final HashSet<Element> elements = new HashSet<Element>();
-
-  /**
-   * [LocalVariableElement]s that represent exceptions in [CatchClause]s.
-   */
-  final HashSet<LocalVariableElement> catchExceptionElements =
-      new HashSet<LocalVariableElement>();
-
-  /**
-   * [LocalVariableElement]s that represent stack traces in [CatchClause]s.
-   */
-  final HashSet<LocalVariableElement> catchStackTraceElements =
-      new HashSet<LocalVariableElement>();
-
-  /**
-   * Names of resolved or unresolved class members that are referenced in the
-   * library.
-   */
-  final HashSet<String> members = new HashSet<String>();
-
-  /**
-   * Names of resolved or unresolved class members that are read in the
-   * library.
-   */
-  final HashSet<String> readMembers = new HashSet<String>();
-
-  void addCatchException(LocalVariableElement element) {
-    if (element != null) {
-      catchExceptionElements.add(element);
-    }
-  }
-
-  void addCatchStackTrace(LocalVariableElement element) {
-    if (element != null) {
-      catchStackTraceElements.add(element);
-    }
-  }
-
-  bool isCatchException(LocalVariableElement element) {
-    return catchExceptionElements.contains(element);
-  }
-
-  bool isCatchStackTrace(LocalVariableElement element) {
-    return catchStackTraceElements.contains(element);
-  }
 }

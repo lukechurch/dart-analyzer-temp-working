@@ -185,6 +185,8 @@ class DeclarationMatcher extends RecursiveAstVisitor {
         ? _enclosingClass.unnamedConstructor
         : _enclosingClass.getNamedConstructor(constructorName.name);
     _processElement(element);
+    _assertEquals(node.constKeyword != null, element.isConst);
+    _assertEquals(node.factoryKeyword != null, element.isFactory);
     _assertCompatibleParameters(node.parameters, element.parameters);
     // TODO(scheglov) debug null Location
     if (element != null) {
@@ -1165,6 +1167,7 @@ class PoorMansIncrementalResolver {
   final Source _unitSource;
   final DartEntry _entry;
   final CompilationUnit _oldUnit;
+  final AnalysisOptions _options;
   CompilationUnitElement _unitElement;
 
   int _updateOffset;
@@ -1176,7 +1179,7 @@ class PoorMansIncrementalResolver {
   List<AnalysisError> _newParseErrors = <AnalysisError>[];
 
   PoorMansIncrementalResolver(this._typeProvider, this._unitSource, this._entry,
-      this._oldUnit, bool resolveApiChanges) {
+      this._oldUnit, bool resolveApiChanges, this._options) {
     _resolveApiChanges = resolveApiChanges;
   }
 
@@ -1389,6 +1392,7 @@ class PoorMansIncrementalResolver {
     RecordingErrorListener errorListener = new RecordingErrorListener();
     CharSequenceReader reader = new CharSequenceReader(code);
     Scanner scanner = new Scanner(_unitSource, reader, errorListener);
+    scanner.enableNullAwareOperators = _options.enableNullAwareOperators;
     Token token = scanner.tokenize();
     _newScanErrors = errorListener.errors;
     return token;

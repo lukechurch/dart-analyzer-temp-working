@@ -11,6 +11,7 @@ import 'package:analyzer/src/generated/ast.dart';
 import 'package:analyzer/src/generated/element.dart';
 import 'package:analyzer/src/generated/engine.dart' hide AnalysisTask;
 import 'package:analyzer/src/generated/error.dart';
+import 'package:analyzer/src/generated/error_verifier.dart';
 import 'package:analyzer/src/generated/java_engine.dart';
 import 'package:analyzer/src/generated/parser.dart';
 import 'package:analyzer/src/generated/resolver.dart';
@@ -94,11 +95,32 @@ final ResultDescriptor<List<AnalysisError>> CONSTRUCTORS_ERRORS =
 
 /**
  * The sources representing the export closure of a library.
+ * The [Source]s include only library sources, not their units.
  *
  * The result is only available for targets representing a Dart library.
  */
 final ListResultDescriptor<Source> EXPORT_SOURCE_CLOSURE =
     new ListResultDescriptor<Source>('EXPORT_SOURCE_CLOSURE', null);
+
+/**
+ * The errors produced while generating hints a compilation unit.
+ *
+ * The list will be empty if there were no errors, but will not be `null`.
+ *
+ * The result is only available for targets representing a Dart compilation unit.
+ */
+final ResultDescriptor<List<AnalysisError>> HINTS =
+    new ResultDescriptor<List<AnalysisError>>(
+        'HINT_ERRORS', AnalysisError.NO_ERRORS, contributesTo: DART_ERRORS);
+
+/**
+ * The sources representing the import closure of a library.
+ * The [Source]s include only library sources, not their units.
+ *
+ * The result is only available for targets representing a Dart library.
+ */
+final ListResultDescriptor<Source> IMPORT_SOURCE_CLOSURE =
+    new ListResultDescriptor<Source>('IMPORT_SOURCE_CLOSURE', null);
 
 /**
  * The partial [LibraryElement] associated with a library.
@@ -267,6 +289,23 @@ final ResultDescriptor<List<AnalysisError>> SCAN_ERRORS =
  */
 final ResultDescriptor<TypeProvider> TYPE_PROVIDER =
     new ResultDescriptor<TypeProvider>('TYPE_PROVIDER', null);
+
+/**
+ * The used [Element]s of a [LibraryUnitTarget].
+ */
+final ResultDescriptor<UsedElements> USED_ELEMENTS =
+    new ResultDescriptor<UsedElements>('USED_ELEMENTS', null);
+
+/**
+ * The errors produced while verifying a compilation unit.
+ *
+ * The list will be empty if there were no errors, but will not be `null`.
+ *
+ * The result is only available for targets representing a Dart compilation unit.
+ */
+final ResultDescriptor<List<AnalysisError>> VERIFY_ERRORS =
+    new ResultDescriptor<List<AnalysisError>>(
+        'VERIFY_ERRORS', AnalysisError.NO_ERRORS, contributesTo: DART_ERRORS);
 
 /**
  * A task that builds implicit constructors for a [ClassElement], or keeps
@@ -942,77 +981,6 @@ class BuildExportNamespaceTask extends SourceBasedAnalysisTask {
 }
 
 /**
- * A task that builds [EXPORT_SOURCE_CLOSURE] of a library.
- */
-class BuildExportSourceClosureTask extends SourceBasedAnalysisTask {
-  /**
-   * The name of the input for [LIBRARY_ELEMENT3] of a library.
-   */
-  static const String LIBRARY2_ELEMENT_INPUT = 'LIBRARY2_ELEMENT_INPUT';
-
-  /**
-   * The task descriptor describing this kind of task.
-   */
-  static final TaskDescriptor DESCRIPTOR = new TaskDescriptor(
-      'BuildExportSourceClosureTask', createTask, buildInputs,
-      <ResultDescriptor>[EXPORT_SOURCE_CLOSURE]);
-
-  BuildExportSourceClosureTask(
-      InternalAnalysisContext context, AnalysisTarget target)
-      : super(context, target);
-
-  @override
-  TaskDescriptor get descriptor => DESCRIPTOR;
-
-  @override
-  void internalPerform() {
-    LibraryElement library = getRequiredInput(LIBRARY2_ELEMENT_INPUT);
-    //
-    // Compute export closure.
-    //
-    Set<LibraryElement> libraries = new Set<LibraryElement>();
-    _buildExportClosure(libraries, library);
-    List<Source> sources = libraries.map((lib) => lib.source).toList();
-    //
-    // Record outputs.
-    //
-    outputs[EXPORT_SOURCE_CLOSURE] = sources;
-  }
-
-  /**
-   * Return a map from the names of the inputs of this kind of task to the task
-   * input descriptors describing those inputs for a task with the
-   * given library [libSource].
-   */
-  static Map<String, TaskInput> buildInputs(Source libSource) {
-    return <String, TaskInput>{
-      LIBRARY2_ELEMENT_INPUT: LIBRARY_ELEMENT2.of(libSource)
-    };
-  }
-
-  /**
-   * Create a [BuildExportSourceClosureTask] based on the given [target] in
-   * the given [context].
-   */
-  static BuildExportSourceClosureTask createTask(
-      AnalysisContext context, AnalysisTarget target) {
-    return new BuildExportSourceClosureTask(context, target);
-  }
-
-  /**
-   * Create a set representing the export closure of the given [library].
-   */
-  static void _buildExportClosure(
-      Set<LibraryElement> libraries, LibraryElement library) {
-    if (library != null && libraries.add(library)) {
-      for (ExportElement exportElement in library.exports) {
-        _buildExportClosure(libraries, exportElement.exportedLibrary);
-      }
-    }
-  }
-}
-
-/**
  * A task that builds [RESOLVED_UNIT3] for a unit.
  */
 class BuildFunctionTypeAliasesTask extends SourceBasedAnalysisTask {
@@ -1474,6 +1442,68 @@ class BuildPublicNamespaceTask extends SourceBasedAnalysisTask {
 }
 
 /**
+ * A task that builds [IMPORT_SOURCE_CLOSURE] and [EXPORT_SOURCE_CLOSURE] of
+ * a library.
+ */
+class BuildSourceClosuresTask extends SourceBasedAnalysisTask {
+  /**
+   * The name of the import closure.
+   */
+  static const String IMPORT_CLOSURE_INPUT = 'IMPORT_CLOSURE_INPUT';
+
+  /**
+   * The name of the export closure.
+   */
+  static const String EXPORT_CLOSURE_INPUT = 'EXPORT_CLOSURE_INPUT';
+
+  /**
+   * The task descriptor describing this kind of task.
+   */
+  static final TaskDescriptor DESCRIPTOR = new TaskDescriptor(
+      'BuildExportSourceClosureTask', createTask, buildInputs,
+      <ResultDescriptor>[IMPORT_SOURCE_CLOSURE, EXPORT_SOURCE_CLOSURE]);
+
+  BuildSourceClosuresTask(
+      InternalAnalysisContext context, AnalysisTarget target)
+      : super(context, target);
+
+  @override
+  TaskDescriptor get descriptor => DESCRIPTOR;
+
+  @override
+  void internalPerform() {
+    List<Source> importClosure = getRequiredInput(IMPORT_CLOSURE_INPUT);
+    List<Source> exportClosure = getRequiredInput(EXPORT_CLOSURE_INPUT);
+    //
+    // Record outputs.
+    //
+    outputs[IMPORT_SOURCE_CLOSURE] = importClosure;
+    outputs[EXPORT_SOURCE_CLOSURE] = exportClosure;
+  }
+
+  /**
+   * Return a map from the names of the inputs of this kind of task to the task
+   * input descriptors describing those inputs for a task with the
+   * given library [libSource].
+   */
+  static Map<String, TaskInput> buildInputs(Source libSource) {
+    return <String, TaskInput>{
+      IMPORT_CLOSURE_INPUT: new _ImportSourceClosureTaskInput(libSource),
+      EXPORT_CLOSURE_INPUT: new _ExportSourceClosureTaskInput(libSource)
+    };
+  }
+
+  /**
+   * Create a [BuildSourceClosuresTask] based on the given [target] in
+   * the given [context].
+   */
+  static BuildSourceClosuresTask createTask(
+      AnalysisContext context, AnalysisTarget target) {
+    return new BuildSourceClosuresTask(context, target);
+  }
+}
+
+/**
  * A task that builds [TYPE_PROVIDER] for a context.
  */
 class BuildTypeProviderTask extends SourceBasedAnalysisTask {
@@ -1635,6 +1665,160 @@ class ExportNamespaceBuilder {
       }
     }
     return newNames;
+  }
+}
+
+/**
+ * A task that builds [USED_ELEMENTS] for a unit.
+ */
+class GatherUsedElementsTask extends SourceBasedAnalysisTask {
+  /**
+   * The name of the [RESOLVED_UNIT] input.
+   */
+  static const String UNIT_INPUT = 'UNIT_INPUT';
+
+  /**
+   * The task descriptor describing this kind of task.
+   */
+  static final TaskDescriptor DESCRIPTOR = new TaskDescriptor(
+      'GatherUsedElementsTask', createTask, buildInputs,
+      <ResultDescriptor>[USED_ELEMENTS]);
+
+  GatherUsedElementsTask(InternalAnalysisContext context, AnalysisTarget target)
+      : super(context, target);
+
+  @override
+  TaskDescriptor get descriptor => DESCRIPTOR;
+
+  @override
+  void internalPerform() {
+    CompilationUnit unit = getRequiredInput(UNIT_INPUT);
+    CompilationUnitElement unitElement = unit.element;
+    LibraryElement libraryElement = unitElement.library;
+    //
+    // Prepare visited elements.
+    //
+    GatherUsedElementsVisitor visitor =
+        new GatherUsedElementsVisitor(libraryElement);
+    unit.accept(visitor);
+    //
+    // Record outputs.
+    //
+    outputs[USED_ELEMENTS] = visitor.usedElements;
+  }
+
+  /**
+   * Return a map from the names of the inputs of this kind of task to the task
+   * input descriptors describing those inputs for a task with the
+   * given [target].
+   */
+  static Map<String, TaskInput> buildInputs(LibraryUnitTarget target) {
+    return <String, TaskInput>{UNIT_INPUT: RESOLVED_UNIT.of(target)};
+  }
+
+  /**
+   * Create a [GatherUsedElementsTask] based on the given [target] in
+   * the given [context].
+   */
+  static GatherUsedElementsTask createTask(
+      AnalysisContext context, LibraryUnitTarget target) {
+    return new GatherUsedElementsTask(context, target);
+  }
+}
+
+/**
+ * A task that generates [HINTS] for a unit.
+ */
+class GenerateHintsTask extends SourceBasedAnalysisTask {
+  /**
+   * The name of the [RESOLVED_UNIT] input.
+   */
+  static const String UNIT_INPUT = 'UNIT_INPUT';
+
+  /**
+   * The name of a list of [USED_ELEMENTS] for each library unit input.
+   */
+  static const String USED_ELEMENTS_INPUT = 'USED_ELEMENTS_INPUT';
+
+  /**
+   * The task descriptor describing this kind of task.
+   */
+  static final TaskDescriptor DESCRIPTOR = new TaskDescriptor(
+      'GenerateHintsTask', createTask, buildInputs, <ResultDescriptor>[HINTS]);
+
+  GenerateHintsTask(InternalAnalysisContext context, AnalysisTarget target)
+      : super(context, target);
+
+  @override
+  TaskDescriptor get descriptor => DESCRIPTOR;
+
+  @override
+  void internalPerform() {
+    RecordingErrorListener errorListener = new RecordingErrorListener();
+    Source source = getRequiredSource();
+    ErrorReporter errorReporter = new ErrorReporter(errorListener, source);
+    //
+    // Prepare inputs.
+    //
+    CompilationUnit unit = getRequiredInput(UNIT_INPUT);
+    List<UsedElements> usedElementsList = getRequiredInput(USED_ELEMENTS_INPUT);
+    CompilationUnitElement unitElement = unit.element;
+    LibraryElement libraryElement = unitElement.library;
+    //
+    // Generate errors.
+    //
+    // TODO(scheglov) move collecting used imports into a separate task
+//      unit.accept(_importsVerifier);
+    // Dead code analysis.
+    unit.accept(new DeadCodeVerifier(errorReporter));
+    // Unused elements.
+    {
+      UsedElements usedElements = new UsedElements.merge(usedElementsList);
+      UnusedElementsVerifier visitor =
+          new UnusedElementsVerifier(errorListener, usedElements);
+      unitElement.accept(visitor);
+    }
+    // Dart2js analysis.
+    if (context.analysisOptions.dart2jsHint) {
+      unit.accept(new Dart2JSVerifier(errorReporter));
+    }
+    // Dart best practices.
+    InheritanceManager inheritanceManager =
+        new InheritanceManager(libraryElement);
+    TypeProvider typeProvider = context.typeProvider;
+    unit.accept(new BestPracticesVerifier(errorReporter, typeProvider));
+    unit.accept(new OverrideVerifier(errorReporter, inheritanceManager));
+    // Find to-do comments.
+    new ToDoFinder(errorReporter).findIn(unit);
+    //
+    // Record outputs.
+    //
+    outputs[HINTS] = errorListener.errors;
+  }
+
+  /**
+   * Return a map from the names of the inputs of this kind of task to the task
+   * input descriptors describing those inputs for a task with the
+   * given [target].
+   */
+  static Map<String, TaskInput> buildInputs(LibraryUnitTarget target) {
+    Source libSource = target.library;
+    return <String, TaskInput>{
+      UNIT_INPUT: RESOLVED_UNIT.of(target),
+      USED_ELEMENTS_INPUT: UNITS.of(libSource).toList((unit) {
+        LibraryUnitTarget target = new LibraryUnitTarget(libSource, unit);
+        return USED_ELEMENTS.of(target);
+      })
+    };
+  }
+
+  /**
+   * Create a [GenerateHintsTask] based on the given [target] in
+   * the given [context].
+   */
+  static GenerateHintsTask createTask(
+      AnalysisContext context, AnalysisTarget target) {
+    return new GenerateHintsTask(context, target);
   }
 }
 
@@ -1909,8 +2093,11 @@ class ResolveLibraryTypeNamesTask extends SourceBasedAnalysisTask {
   static Map<String, TaskInput> buildInputs(Source libSource) {
     return <String, TaskInput>{
       LIBRARY_INPUT: LIBRARY_ELEMENT4.of(libSource),
-      'resolvedUnits': UNITS.of(libSource).toMap((Source source) =>
-          RESOLVED_UNIT4.of(new LibraryUnitTarget(libSource, source)))
+      'resolvedUnits': IMPORT_SOURCE_CLOSURE
+          .of(libSource)
+          .toMapOf(UNITS)
+          .toFlattenList((Source library, Source unit) =>
+              RESOLVED_UNIT4.of(new LibraryUnitTarget(library, unit)))
     };
   }
 
@@ -2175,6 +2362,8 @@ class ScanDartTask extends SourceBasedAnalysisTask {
     Scanner scanner =
         new Scanner(source, new CharSequenceReader(content), errorListener);
     scanner.preserveComments = context.analysisOptions.preserveComments;
+    scanner.enableNullAwareOperators =
+        context.analysisOptions.enableNullAwareOperators;
     outputs[TOKEN_STREAM] = scanner.tokenize();
     outputs[LINE_INFO] = new LineInfo(scanner.lineStarts);
     outputs[SCAN_ERRORS] = errorListener.getErrorsForSource(source);
@@ -2195,5 +2384,157 @@ class ScanDartTask extends SourceBasedAnalysisTask {
   static ScanDartTask createTask(
       AnalysisContext context, AnalysisTarget target) {
     return new ScanDartTask(context, target);
+  }
+}
+
+/**
+ * A task that builds [VERIFY_ERRORS] for a unit.
+ */
+class VerifyUnitTask extends SourceBasedAnalysisTask {
+  /**
+   * The name of the [RESOLVED_UNIT] input.
+   */
+  static const String UNIT_INPUT = 'UNIT_INPUT';
+
+  /**
+   * The task descriptor describing this kind of task.
+   */
+  static final TaskDescriptor DESCRIPTOR = new TaskDescriptor('VerifyUnitTask',
+      createTask, buildInputs, <ResultDescriptor>[VERIFY_ERRORS]);
+
+  /**
+   * The [ErrorReporter] to report errors to.
+   */
+  ErrorReporter errorReporter;
+
+  VerifyUnitTask(InternalAnalysisContext context, AnalysisTarget target)
+      : super(context, target);
+
+  @override
+  TaskDescriptor get descriptor => DESCRIPTOR;
+
+  @override
+  void internalPerform() {
+    RecordingErrorListener errorListener = new RecordingErrorListener();
+    Source source = getRequiredSource();
+    errorReporter = new ErrorReporter(errorListener, source);
+    TypeProvider typeProvider = context.typeProvider;
+    //
+    // Prepare inputs.
+    //
+    CompilationUnit unit = getRequiredInput(UNIT_INPUT);
+    CompilationUnitElement unitElement = unit.element;
+    LibraryElement libraryElement = unitElement.library;
+    //
+    // Use the ErrorVerifier to compute errors.
+    //
+    ErrorVerifier errorVerifier = new ErrorVerifier(errorReporter,
+        libraryElement, typeProvider, new InheritanceManager(libraryElement));
+    unit.accept(errorVerifier);
+    //
+    // Record outputs.
+    //
+    outputs[VERIFY_ERRORS] = errorListener.errors;
+  }
+
+  /**
+   * Return a map from the names of the inputs of this kind of task to the task
+   * input descriptors describing those inputs for a task with the
+   * given [target].
+   */
+  static Map<String, TaskInput> buildInputs(LibraryUnitTarget target) {
+    return <String, TaskInput>{UNIT_INPUT: RESOLVED_UNIT.of(target)};
+  }
+
+  /**
+   * Create a [VerifyUnitTask] based on the given [target] in
+   * the given [context].
+   */
+  static VerifyUnitTask createTask(
+      AnalysisContext context, AnalysisTarget target) {
+    return new VerifyUnitTask(context, target);
+  }
+}
+
+/**
+ * A [TaskInput] whose value is a list of library sources exported directly
+ * or indirectly by the target [Source].
+ */
+class _ExportSourceClosureTaskInput implements TaskInput<List<Source>> {
+  final Source target;
+
+  _ExportSourceClosureTaskInput(this.target);
+
+  @override
+  TaskInputBuilder<List<Source>> createBuilder() =>
+      new _SourceClosureTaskInputBuilder(target, _SourceClosureKind.EXPORT);
+}
+
+/**
+ * The kind of the source closure to build.
+ */
+enum _SourceClosureKind { IMPORT, EXPORT }
+
+/**
+ * A [TaskInput] whose value is a list of library sources imported directly
+ * or indirectly by the target [Source].
+ */
+class _ImportSourceClosureTaskInput implements TaskInput<List<Source>> {
+  final Source target;
+
+  _ImportSourceClosureTaskInput(this.target);
+
+  @override
+  TaskInputBuilder<List<Source>> createBuilder() =>
+      new _SourceClosureTaskInputBuilder(target, _SourceClosureKind.IMPORT);
+}
+
+/**
+ * A [TaskInputBuilder] to build values for [_ImportSourceClosureTaskInput].
+ */
+class _SourceClosureTaskInputBuilder implements TaskInputBuilder<List<Source>> {
+  final _SourceClosureKind kind;
+  final Set<LibraryElement> _libraries = new HashSet<LibraryElement>();
+  final Set<Source> _newSources = new HashSet<Source>();
+
+  Source currentTarget;
+
+  _SourceClosureTaskInputBuilder(Source librarySource, this.kind) {
+    _newSources.add(librarySource);
+  }
+
+  @override
+  ResultDescriptor get currentResult => LIBRARY_ELEMENT2;
+
+  @override
+  void set currentValue(LibraryElement library) {
+    if (_libraries.add(library)) {
+      if (kind == _SourceClosureKind.IMPORT) {
+        for (ImportElement importElement in library.imports) {
+          Source importedSource = importElement.importedLibrary.source;
+          _newSources.add(importedSource);
+        }
+      } else {
+        for (ExportElement exportElement in library.exports) {
+          Source importedSource = exportElement.exportedLibrary.source;
+          _newSources.add(importedSource);
+        }
+      }
+    }
+  }
+
+  @override
+  List<Source> get inputValue {
+    return _libraries.map((LibraryElement library) => library.source).toList();
+  }
+
+  @override
+  bool moveNext() {
+    if (_newSources.isEmpty) {
+      return false;
+    }
+    currentTarget = _newSources.first;
+    _newSources.remove(currentTarget);
+    return true;
   }
 }

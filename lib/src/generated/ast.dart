@@ -5309,6 +5309,18 @@ class ConstantEvaluator extends GeneralizingAstVisitor<Object> {
 }
 
 /**
+ * Object representing a "const" instance creation expression, and its
+ * evaluation result.  This is used as the AnalysisTarget for constant
+ * evaluation of instance creation expressions.
+ */
+class ConstantInstanceCreationHandle {
+  /**
+   * The result of evaluating the constant.
+   */
+  EvaluationResultImpl evaluationResult;
+}
+
+/**
  * A constructor declaration.
  *
  * > constructorDeclaration ::=
@@ -10625,9 +10637,10 @@ class InstanceCreationExpression extends Expression {
   ConstructorElement staticElement;
 
   /**
-   * The result of evaluating this expression, if it is constant.
+   * The [ConstantInstanceCreationHandle] holding the result of evaluating this
+   * expression, if it is constant.
    */
-  EvaluationResultImpl evaluationResult;
+  ConstantInstanceCreationHandle constantHandle;
 
   /**
    * Initialize a newly created instance creation expression.
@@ -10673,6 +10686,16 @@ class InstanceCreationExpression extends Expression {
 
   @override
   Token get endToken => _argumentList.endToken;
+
+  /**
+   * The result of evaluating this expression, if it is constant.
+   */
+  EvaluationResultImpl get evaluationResult {
+    if (constantHandle != null) {
+      return constantHandle.evaluationResult;
+    }
+    return null;
+  }
 
   /**
    * Return `true` if this creation expression is used to invoke a constant
@@ -16680,28 +16703,30 @@ class StringLexemeHelper {
   int end;
 
   StringLexemeHelper(this.lexeme, this.isFirst, this.isLast) {
-    isRaw = StringUtilities.startsWithChar(lexeme, 0x72);
-    if (isRaw) {
-      start++;
-    }
-    if (StringUtilities.startsWith3(lexeme, start, 0x27, 0x27, 0x27)) {
-      isSingleQuoted = true;
-      isMultiline = true;
-      start += 3;
-      start = _trimInitialWhitespace(start);
-    } else if (StringUtilities.startsWith3(lexeme, start, 0x22, 0x22, 0x22)) {
-      isSingleQuoted = false;
-      isMultiline = true;
-      start += 3;
-      start = _trimInitialWhitespace(start);
-    } else if (start < lexeme.length && lexeme.codeUnitAt(start) == 0x27) {
-      isSingleQuoted = true;
-      isMultiline = false;
-      start++;
-    } else if (start < lexeme.length && lexeme.codeUnitAt(start) == 0x22) {
-      isSingleQuoted = false;
-      isMultiline = false;
-      start++;
+    if (isFirst) {
+      isRaw = StringUtilities.startsWithChar(lexeme, 0x72);
+      if (isRaw) {
+        start++;
+      }
+      if (StringUtilities.startsWith3(lexeme, start, 0x27, 0x27, 0x27)) {
+        isSingleQuoted = true;
+        isMultiline = true;
+        start += 3;
+        start = _trimInitialWhitespace(start);
+      } else if (StringUtilities.startsWith3(lexeme, start, 0x22, 0x22, 0x22)) {
+        isSingleQuoted = false;
+        isMultiline = true;
+        start += 3;
+        start = _trimInitialWhitespace(start);
+      } else if (start < lexeme.length && lexeme.codeUnitAt(start) == 0x27) {
+        isSingleQuoted = true;
+        isMultiline = false;
+        start++;
+      } else if (start < lexeme.length && lexeme.codeUnitAt(start) == 0x22) {
+        isSingleQuoted = false;
+        isMultiline = false;
+        start++;
+      }
     }
     end = lexeme.length;
     if (isLast) {
