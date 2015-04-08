@@ -14,10 +14,12 @@ import 'package:watcher/watcher.dart';
 
 import 'file_system.dart';
 
+
 /**
  * A `dart:io` based implementation of [ResourceProvider].
  */
 class PhysicalResourceProvider implements ResourceProvider {
+
   static final NORMALIZE_EOL_ALWAYS =
       (String string) => string.replaceAll(new RegExp('\r\n?'), '\n');
 
@@ -68,6 +70,7 @@ class PhysicalResourceProvider implements ResourceProvider {
   }
 }
 
+
 /**
  * A `dart:io` based implementation of [File].
  */
@@ -80,7 +83,7 @@ class _PhysicalFile extends _PhysicalResource implements File {
       io.File file = _entry as io.File;
       return file.lastModifiedSync().millisecondsSinceEpoch;
     } on io.FileSystemException catch (exception) {
-      throw new FileSystemException(exception.path, exception.message);
+      throw new FileSystemException(path, exception.message);
     }
   }
 
@@ -98,17 +101,8 @@ class _PhysicalFile extends _PhysicalResource implements File {
   bool isOrContains(String path) {
     return path == this.path;
   }
-
-  @override
-  String readAsStringSync() {
-    try {
-      io.File file = _entry as io.File;
-      return file.readAsStringSync();
-    } on io.FileSystemException catch (exception) {
-      throw new FileSystemException(exception.path, exception.message);
-    }
-  }
 }
+
 
 /**
  * A `dart:io` based implementation of [Folder].
@@ -136,31 +130,20 @@ class _PhysicalFolder extends _PhysicalResource implements Folder {
   }
 
   @override
-  _PhysicalFolder getChildAssumingFolder(String relPath) {
-    String canonicalPath = canonicalizePath(relPath);
-    io.Directory directory = new io.Directory(canonicalPath);
-    return new _PhysicalFolder(directory);
-  }
-
-  @override
   List<Resource> getChildren() {
-    try {
-      List<Resource> children = <Resource>[];
-      io.Directory directory = _entry as io.Directory;
-      List<io.FileSystemEntity> entries = directory.listSync(recursive: false);
-      int numEntries = entries.length;
-      for (int i = 0; i < numEntries; i++) {
-        io.FileSystemEntity entity = entries[i];
-        if (entity is io.Directory) {
-          children.add(new _PhysicalFolder(entity));
-        } else if (entity is io.File) {
-          children.add(new _PhysicalFile(entity));
-        }
+    List<Resource> children = <Resource>[];
+    io.Directory directory = _entry as io.Directory;
+    List<io.FileSystemEntity> entries = directory.listSync(recursive: false);
+    int numEntries = entries.length;
+    for (int i = 0; i < numEntries; i++) {
+      io.FileSystemEntity entity = entries[i];
+      if (entity is io.Directory) {
+        children.add(new _PhysicalFolder(entity));
+      } else if (entity is io.File) {
+        children.add(new _PhysicalFile(entity));
       }
-      return children;
-    } on io.FileSystemException catch (exception) {
-      throw new FileSystemException(exception.path, exception.message);
     }
+    return children;
   }
 
   @override
@@ -171,6 +154,7 @@ class _PhysicalFolder extends _PhysicalResource implements Folder {
     return contains(path);
   }
 }
+
 
 /**
  * A `dart:io` based implementation of [Resource].

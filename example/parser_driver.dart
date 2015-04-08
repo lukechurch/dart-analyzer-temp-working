@@ -10,7 +10,9 @@ import 'package:analyzer/src/generated/error.dart';
 import 'package:analyzer/src/generated/parser.dart';
 import 'package:analyzer/src/generated/scanner.dart';
 
+
 main(List<String> args) {
+
   print('working dir ${new File('.').resolveSymbolicLinksSync()}');
 
   if (args.length == 0) {
@@ -21,6 +23,7 @@ main(List<String> args) {
   for (var arg in args) {
     _parse(new File(arg));
   }
+
 }
 
 _parse(File file) {

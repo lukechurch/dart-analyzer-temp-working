@@ -11,6 +11,7 @@ import 'package:unittest/unittest.dart';
 import '../reflective_tests.dart';
 import 'resolver_test.dart';
 
+
 main() {
   groupSep = ' | ';
   runReflectiveTests(StaticWarningCodeTest);
@@ -32,10 +33,11 @@ class StaticWarningCodeTest extends ResolverTestCase {
 class A {
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.UNDEFINED_IDENTIFIER,
-      StaticWarningCode.UNDEFINED_IDENTIFIER
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticWarningCode.UNDEFINED_IDENTIFIER,
+            StaticWarningCode.UNDEFINED_IDENTIFIER]);
   }
 
   void fail_undefinedSetter() {
@@ -76,10 +78,9 @@ class N {}''');
 library lib2;
 class N {}''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.AMBIGUOUS_IMPORT,
-      CompileTimeErrorCode.EXTENDS_NON_CLASS
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.AMBIGUOUS_IMPORT, CompileTimeErrorCode.EXTENDS_NON_CLASS]);
   }
 
   void test_ambiguousImport_implements() {
@@ -94,10 +95,11 @@ class N {}''');
 library lib2;
 class N {}''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.AMBIGUOUS_IMPORT,
-      CompileTimeErrorCode.IMPLEMENTS_NON_CLASS
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticWarningCode.AMBIGUOUS_IMPORT,
+            CompileTimeErrorCode.IMPLEMENTS_NON_CLASS]);
   }
 
   void test_ambiguousImport_inPart() {
@@ -116,10 +118,9 @@ class N {}''');
 part of lib;
 class A extends N {}''');
     resolve(source);
-    assertErrors(partSource, [
-      StaticWarningCode.AMBIGUOUS_IMPORT,
-      CompileTimeErrorCode.EXTENDS_NON_CLASS
-    ]);
+    assertErrors(
+        partSource,
+        [StaticWarningCode.AMBIGUOUS_IMPORT, CompileTimeErrorCode.EXTENDS_NON_CLASS]);
   }
 
   void test_ambiguousImport_instanceCreation() {
@@ -188,15 +189,16 @@ class N {}''');
 library lib2;
 class N {}''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.AMBIGUOUS_IMPORT,
-      StaticWarningCode.AMBIGUOUS_IMPORT,
-      StaticWarningCode.AMBIGUOUS_IMPORT,
-      StaticWarningCode.AMBIGUOUS_IMPORT,
-      StaticWarningCode.AMBIGUOUS_IMPORT,
-      StaticWarningCode.AMBIGUOUS_IMPORT,
-      StaticWarningCode.AMBIGUOUS_IMPORT
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticWarningCode.AMBIGUOUS_IMPORT,
+            StaticWarningCode.AMBIGUOUS_IMPORT,
+            StaticWarningCode.AMBIGUOUS_IMPORT,
+            StaticWarningCode.AMBIGUOUS_IMPORT,
+            StaticWarningCode.AMBIGUOUS_IMPORT,
+            StaticWarningCode.AMBIGUOUS_IMPORT,
+            StaticWarningCode.AMBIGUOUS_IMPORT]);
   }
 
   void test_ambiguousImport_typeArgument_annotation() {
@@ -374,10 +376,11 @@ main() {
   const A(42);
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.ARGUMENT_TYPE_NOT_ASSIGNABLE,
-      CheckedModeCompileTimeErrorCode.CONST_CONSTRUCTOR_PARAM_TYPE_MISMATCH
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticWarningCode.ARGUMENT_TYPE_NOT_ASSIGNABLE,
+            CheckedModeCompileTimeErrorCode.CONST_CONSTRUCTOR_PARAM_TYPE_MISMATCH]);
     verify([source]);
   }
 
@@ -598,17 +601,6 @@ main() {
     verify([source]);
   }
 
-  void test_assignmentToClass() {
-    Source source = addSource('''
-class C {}
-main() {
-  C = null;
-}
-''');
-    resolve(source);
-    assertErrors(source, [StaticWarningCode.ASSIGNMENT_TO_TYPE]);
-  }
-
   void test_assignmentToConst_instanceVariable() {
     Source source = addSource(r'''
 class A {
@@ -655,17 +647,6 @@ f() {
     resolve(source);
     assertErrors(source, [StaticWarningCode.ASSIGNMENT_TO_CONST]);
     verify([source]);
-  }
-
-  void test_assignmentToEnumType() {
-    Source source = addSource('''
-enum E { e }
-main() {
-  E = null;
-}
-''');
-    resolve(source);
-    assertErrors(source, [StaticWarningCode.ASSIGNMENT_TO_TYPE]);
   }
 
   void test_assignmentToFinal_instanceVariable() {
@@ -847,29 +828,6 @@ f(A a) {
     verify([source]);
   }
 
-  void test_assignmentToTypedef() {
-    Source source = addSource('''
-typedef void F();
-main() {
-  F = null;
-}
-''');
-    resolve(source);
-    assertErrors(source, [StaticWarningCode.ASSIGNMENT_TO_TYPE]);
-  }
-
-  void test_assignmentToTypeParameter() {
-    Source source = addSource('''
-class C<T> {
-  f() {
-    T = null;
-  }
-}
-''');
-    resolve(source);
-    assertErrors(source, [StaticWarningCode.ASSIGNMENT_TO_TYPE]);
-  }
-
   void test_caseBlockNotTerminated() {
     Source source = addSource(r'''
 f(int p) {
@@ -901,7 +859,8 @@ class A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.CONCRETE_CLASS_WITH_ABSTRACT_MEMBER]);
+        source,
+        [StaticWarningCode.CONCRETE_CLASS_WITH_ABSTRACT_MEMBER]);
     verify([source]);
   }
 
@@ -918,7 +877,8 @@ class Future {}''');
     assertErrors(source, [StaticWarningCode.CONFLICTING_DART_IMPORT]);
   }
 
-  void test_conflictingInstanceGetterAndSuperclassMember_declField_direct_setter() {
+  void
+      test_conflictingInstanceGetterAndSuperclassMember_declField_direct_setter() {
     Source source = addSource(r'''
 class A {
   static set v(x) {}
@@ -927,12 +887,14 @@ class B extends A {
   var v;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_INSTANCE_GETTER_AND_SUPERCLASS_MEMBER]);
     verify([source]);
   }
 
-  void test_conflictingInstanceGetterAndSuperclassMember_declGetter_direct_getter() {
+  void
+      test_conflictingInstanceGetterAndSuperclassMember_declGetter_direct_getter() {
     Source source = addSource(r'''
 class A {
   static get v => 0;
@@ -941,12 +903,14 @@ class B extends A {
   get v => 0;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_INSTANCE_GETTER_AND_SUPERCLASS_MEMBER]);
     verify([source]);
   }
 
-  void test_conflictingInstanceGetterAndSuperclassMember_declGetter_direct_method() {
+  void
+      test_conflictingInstanceGetterAndSuperclassMember_declGetter_direct_method() {
     Source source = addSource(r'''
 class A {
   static v() {}
@@ -955,12 +919,14 @@ class B extends A {
   get v => 0;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_INSTANCE_GETTER_AND_SUPERCLASS_MEMBER]);
     verify([source]);
   }
 
-  void test_conflictingInstanceGetterAndSuperclassMember_declGetter_direct_setter() {
+  void
+      test_conflictingInstanceGetterAndSuperclassMember_declGetter_direct_setter() {
     Source source = addSource(r'''
 class A {
   static set v(x) {}
@@ -969,7 +935,8 @@ class B extends A {
   get v => 0;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_INSTANCE_GETTER_AND_SUPERCLASS_MEMBER]);
     verify([source]);
   }
@@ -984,7 +951,8 @@ class C extends B {
   get v => 0;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_INSTANCE_GETTER_AND_SUPERCLASS_MEMBER]);
     verify([source]);
   }
@@ -998,7 +966,8 @@ class B extends Object with M {
   get v => 0;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_INSTANCE_GETTER_AND_SUPERCLASS_MEMBER]);
     verify([source]);
   }
@@ -1012,7 +981,8 @@ class B extends A {
   get v => 0;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_INSTANCE_GETTER_AND_SUPERCLASS_MEMBER]);
     verify([source]);
   }
@@ -1025,7 +995,8 @@ class A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.CONFLICTING_INSTANCE_METHOD_SETTER2]);
+        source,
+        [StaticWarningCode.CONFLICTING_INSTANCE_METHOD_SETTER2]);
     verify([source]);
   }
 
@@ -1037,7 +1008,8 @@ class A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.CONFLICTING_INSTANCE_METHOD_SETTER]);
+        source,
+        [StaticWarningCode.CONFLICTING_INSTANCE_METHOD_SETTER]);
     verify([source]);
   }
 
@@ -1051,7 +1023,8 @@ abstract class B implements A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.CONFLICTING_INSTANCE_METHOD_SETTER]);
+        source,
+        [StaticWarningCode.CONFLICTING_INSTANCE_METHOD_SETTER]);
     verify([source]);
   }
 
@@ -1065,7 +1038,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.CONFLICTING_INSTANCE_METHOD_SETTER]);
+        source,
+        [StaticWarningCode.CONFLICTING_INSTANCE_METHOD_SETTER]);
     verify([source]);
   }
 
@@ -1078,7 +1052,8 @@ class B extends A {
   set v(x) {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_INSTANCE_SETTER_AND_SUPERCLASS_MEMBER]);
     verify([source]);
   }
@@ -1092,7 +1067,8 @@ class B extends Object with A {
   static get x => 0;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_STATIC_GETTER_AND_INSTANCE_SETTER]);
     verify([source]);
   }
@@ -1106,7 +1082,8 @@ class B extends A {
   static get x => 0;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_STATIC_GETTER_AND_INSTANCE_SETTER]);
     verify([source]);
   }
@@ -1118,7 +1095,8 @@ class A {
   set x(int p) {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_STATIC_GETTER_AND_INSTANCE_SETTER]);
     verify([source]);
   }
@@ -1130,7 +1108,8 @@ class A {
   static set x(int p) {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_STATIC_SETTER_AND_INSTANCE_MEMBER]);
     verify([source]);
   }
@@ -1142,7 +1121,8 @@ class A {
   static set x(int p) {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.CONFLICTING_STATIC_SETTER_AND_INSTANCE_MEMBER]);
     verify([source]);
   }
@@ -1243,7 +1223,8 @@ class A {
   A() : x = 1 {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.FIELD_INITIALIZED_IN_INITIALIZER_AND_DECLARATION]);
     verify([source]);
   }
@@ -1267,7 +1248,8 @@ class A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.FIELD_INITIALIZING_FORMAL_NOT_ASSIGNABLE]);
+        source,
+        [StaticWarningCode.FIELD_INITIALIZING_FORMAL_NOT_ASSIGNABLE]);
     verify([source]);
   }
 
@@ -1287,7 +1269,8 @@ class A {
   A() : x = 0 {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.FIELD_INITIALIZED_IN_INITIALIZER_AND_DECLARATION]);
     verify([source]);
   }
@@ -1299,47 +1282,20 @@ class A {
   A(this.x) {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.FINAL_INITIALIZED_IN_DECLARATION_AND_CONSTRUCTOR]);
     verify([source]);
   }
 
-  void test_finalNotInitialized_inConstructor_1() {
+  void test_finalNotInitialized_inConstructor() {
     Source source = addSource(r'''
 class A {
   final int x;
   A() {}
 }''');
     resolve(source);
-    assertErrors(
-        source, [StaticWarningCode.FINAL_NOT_INITIALIZED_CONSTRUCTOR_1]);
-    verify([source]);
-  }
-
-  void test_finalNotInitialized_inConstructor_2() {
-    Source source = addSource(r'''
-class A {
-  final int a;
-  final int b;
-  A() {}
-}''');
-    resolve(source);
-    assertErrors(
-        source, [StaticWarningCode.FINAL_NOT_INITIALIZED_CONSTRUCTOR_2]);
-    verify([source]);
-  }
-
-  void test_finalNotInitialized_inConstructor_3() {
-    Source source = addSource(r'''
-class A {
-  final int a;
-  final int b;
-  final int c;
-  A() {}
-}''');
-    resolve(source);
-    assertErrors(
-        source, [StaticWarningCode.FINAL_NOT_INITIALIZED_CONSTRUCTOR_3_PLUS]);
+    assertErrors(source, [StaticWarningCode.FINAL_NOT_INITIALIZED]);
     verify([source]);
   }
 
@@ -1419,11 +1375,12 @@ import 'lib2.dart';''');
     addNamedSource("/lib1.dart", "library lib;");
     addNamedSource("/lib2.dart", "library lib;");
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.IMPORT_DUPLICATED_LIBRARY_NAMED,
-      HintCode.UNUSED_IMPORT,
-      HintCode.UNUSED_IMPORT
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticWarningCode.IMPORT_DUPLICATED_LIBRARY_NAMED,
+            HintCode.UNUSED_IMPORT,
+            HintCode.UNUSED_IMPORT]);
     verify([source]);
   }
 
@@ -1435,24 +1392,22 @@ import 'lib2.dart';''');
     addNamedSource("/lib1.dart", "");
     addNamedSource("/lib2.dart", "");
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.IMPORT_DUPLICATED_LIBRARY_UNNAMED,
-      HintCode.UNUSED_IMPORT,
-      HintCode.UNUSED_IMPORT
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticWarningCode.IMPORT_DUPLICATED_LIBRARY_UNNAMED,
+            HintCode.UNUSED_IMPORT,
+            HintCode.UNUSED_IMPORT]);
     verify([source]);
   }
 
   void test_importOfNonLibrary() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 part of lib;
-class A {}''',
-      r'''
+class A {}''', r'''
 library lib;
 import 'lib1.dart' deferred as p;
-var a = new p.A();'''
-    ], <ErrorCode>[StaticWarningCode.IMPORT_OF_NON_LIBRARY]);
+var a = new p.A();'''], <ErrorCode>[StaticWarningCode.IMPORT_OF_NON_LIBRARY]);
   }
 
   void test_inconsistentMethodInheritanceGetterAndMethod() {
@@ -1466,7 +1421,8 @@ abstract class B {
 class C implements A, B {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.INCONSISTENT_METHOD_INHERITANCE_GETTER_AND_METHOD]);
     verify([source]);
   }
@@ -1480,9 +1436,9 @@ class B extends A {
   void n() {}
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC]);
     verify([source]);
   }
 
@@ -1497,9 +1453,9 @@ class C extends B {
   void n() {}
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC]);
     verify([source]);
   }
 
@@ -1512,9 +1468,9 @@ class B extends A {
   void n() {}
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC]);
     verify([source]);
   }
 
@@ -1529,9 +1485,9 @@ class C extends B {
   void n() {}
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC]);
     verify([source]);
   }
 
@@ -1548,9 +1504,9 @@ class C extends Base implements Ifc {
 }
 ''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC]);
     verify([source]);
   }
 
@@ -1563,9 +1519,9 @@ class B extends A {
   void n() {}
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC]);
     verify([source]);
   }
 
@@ -1580,9 +1536,9 @@ class C extends B {
   void n() {}
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC]);
     verify([source]);
   }
 
@@ -1595,9 +1551,9 @@ class B extends A {
   void n() {}
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC]);
     verify([source]);
   }
 
@@ -1612,9 +1568,9 @@ class C extends B {
   void n() {}
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INSTANCE_METHOD_NAME_COLLIDES_WITH_SUPERCLASS_STATIC]);
     verify([source]);
   }
 
@@ -1628,7 +1584,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_GETTER_OVERRIDE_RETURN_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_GETTER_OVERRIDE_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1641,10 +1598,11 @@ class B extends A {
   int f;
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INVALID_GETTER_OVERRIDE_RETURN_TYPE,
-      StaticWarningCode.INVALID_SETTER_OVERRIDE_NORMAL_PARAM_TYPE
-    ]);
+    assertErrors(
+        source,
+        [
+            StaticWarningCode.INVALID_GETTER_OVERRIDE_RETURN_TYPE,
+            StaticWarningCode.INVALID_SETTER_OVERRIDE_NORMAL_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -1663,7 +1621,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_GETTER_OVERRIDE_RETURN_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_GETTER_OVERRIDE_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1680,7 +1639,8 @@ class B implements I<int>, J<String> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_GETTER_OVERRIDE_RETURN_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_GETTER_OVERRIDE_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1694,7 +1654,8 @@ class B implements A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_NAMED_PARAM_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_NAMED_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -1708,7 +1669,8 @@ class B implements A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_NORMAL_PARAM_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_NORMAL_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -1722,7 +1684,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_NORMAL_PARAM_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_NORMAL_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -1739,7 +1702,8 @@ class B extends I<int> implements J<String> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_NORMAL_PARAM_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_NORMAL_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -1757,7 +1721,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_NORMAL_PARAM_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_NORMAL_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -1775,7 +1740,8 @@ class B implements I<int>, J<String> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_NORMAL_PARAM_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_NORMAL_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -1788,7 +1754,8 @@ class B implements A {
   m([String a]) {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.INVALID_METHOD_OVERRIDE_OPTIONAL_PARAM_TYPE]);
     verify([source]);
   }
@@ -1806,7 +1773,8 @@ class B extends A {
   m([String n]) {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.INVALID_METHOD_OVERRIDE_OPTIONAL_PARAM_TYPE]);
     verify([source]);
   }
@@ -1821,7 +1789,8 @@ class B implements A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1837,7 +1806,8 @@ class C implements B {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1851,7 +1821,8 @@ class B extends Object with A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1865,7 +1836,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1881,7 +1853,8 @@ class C extends B {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1899,7 +1872,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1913,7 +1887,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_METHOD_OVERRIDE_RETURN_TYPE]);
     verify([source]);
   }
 
@@ -1930,9 +1905,9 @@ class B extends A {
 }
 ''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INVALID_OVERRIDE_DIFFERENT_DEFAULT_VALUES_POSITIONAL
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INVALID_OVERRIDE_DIFFERENT_DEFAULT_VALUES_POSITIONAL]);
     verify([source]);
   }
 
@@ -1949,7 +1924,8 @@ class B extends A {
 }
 ''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.INVALID_OVERRIDE_DIFFERENT_DEFAULT_VALUES_NAMED]);
     verify([source]);
   }
@@ -2033,7 +2009,8 @@ class B extends A {
   m({int p : 1}) {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.INVALID_OVERRIDE_DIFFERENT_DEFAULT_VALUES_NAMED]);
     verify([source]);
   }
@@ -2047,9 +2024,9 @@ class B extends A {
   m([int p = 1]) {}
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.INVALID_OVERRIDE_DIFFERENT_DEFAULT_VALUES_POSITIONAL
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.INVALID_OVERRIDE_DIFFERENT_DEFAULT_VALUES_POSITIONAL]);
     verify([source]);
   }
 
@@ -2141,7 +2118,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_SETTER_OVERRIDE_NORMAL_PARAM_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_SETTER_OVERRIDE_NORMAL_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -2159,7 +2137,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_SETTER_OVERRIDE_NORMAL_PARAM_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_SETTER_OVERRIDE_NORMAL_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -2178,7 +2157,8 @@ class B extends A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_SETTER_OVERRIDE_NORMAL_PARAM_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_SETTER_OVERRIDE_NORMAL_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -2195,7 +2175,8 @@ class B implements I<int>, J<String> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.INVALID_SETTER_OVERRIDE_NORMAL_PARAM_TYPE]);
+        source,
+        [StaticWarningCode.INVALID_SETTER_OVERRIDE_NORMAL_PARAM_TYPE]);
     verify([source]);
   }
 
@@ -2228,7 +2209,8 @@ class A {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.MISMATCHED_GETTER_AND_SETTER_TYPES]);
+        source,
+        [StaticWarningCode.MISMATCHED_GETTER_AND_SETTER_TYPES]);
     verify([source]);
   }
 
@@ -2241,7 +2223,8 @@ class B extends A {
   set g(String v) {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.MISMATCHED_GETTER_AND_SETTER_TYPES_FROM_SUPERTYPE]);
     verify([source]);
   }
@@ -2255,7 +2238,8 @@ class B extends A {
   String get g { return ''; }
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.MISMATCHED_GETTER_AND_SETTER_TYPES_FROM_SUPERTYPE]);
     verify([source]);
   }
@@ -2266,7 +2250,8 @@ int get g { return 0; }
 set g(String v) {}''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.MISMATCHED_GETTER_AND_SETTER_TYPES]);
+        source,
+        [StaticWarningCode.MISMATCHED_GETTER_AND_SETTER_TYPES]);
     verify([source]);
   }
 
@@ -2283,10 +2268,9 @@ class C {
   }
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.MIXED_RETURN_TYPES,
-      StaticWarningCode.MIXED_RETURN_TYPES
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.MIXED_RETURN_TYPES, StaticWarningCode.MIXED_RETURN_TYPES]);
     verify([source]);
   }
 
@@ -2301,10 +2285,9 @@ class C {
   }
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.MIXED_RETURN_TYPES,
-      StaticWarningCode.MIXED_RETURN_TYPES
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.MIXED_RETURN_TYPES, StaticWarningCode.MIXED_RETURN_TYPES]);
     verify([source]);
   }
 
@@ -2317,10 +2300,9 @@ f(int x) {
   return 0;
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.MIXED_RETURN_TYPES,
-      StaticWarningCode.MIXED_RETURN_TYPES
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.MIXED_RETURN_TYPES, StaticWarningCode.MIXED_RETURN_TYPES]);
     verify([source]);
   }
 
@@ -2416,7 +2398,8 @@ f() {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.NEW_WITH_UNDEFINED_CONSTRUCTOR_DEFAULT]);
+        source,
+        [StaticWarningCode.NEW_WITH_UNDEFINED_CONSTRUCTOR_DEFAULT]);
     verify([source]);
   }
 
@@ -2432,9 +2415,9 @@ abstract class A {
 class C extends A {
 }''');
     resolve(source);
-    assertErrors(source, [
-      StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_FIVE_PLUS
-    ]);
+    assertErrors(
+        source,
+        [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_FIVE_PLUS]);
     verify([source]);
   }
 
@@ -2449,12 +2432,14 @@ abstract class A {
 class C extends A {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_FOUR]);
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_classTypeAlias_interface() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_classTypeAlias_interface() {
     // 15979
     Source source = addSource(r'''
 abstract class M {}
@@ -2464,7 +2449,8 @@ abstract class I {
 }
 class B = A with M implements I;''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
@@ -2478,12 +2464,14 @@ abstract class M {
 abstract class A {}
 class B = A with M;''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_classTypeAlias_superclass() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_classTypeAlias_superclass() {
     // 15979
     Source source = addSource(r'''
 class M {}
@@ -2492,12 +2480,14 @@ abstract class A {
 }
 class B = A with M;''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_ensureCorrectFunctionSubtypeIsUsedInImplementation() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_ensureCorrectFunctionSubtypeIsUsedInImplementation() {
     // 15028
     Source source = addSource(r'''
 class C {
@@ -2508,7 +2498,8 @@ abstract class D {
 }
 class E extends C implements D {}''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
@@ -2521,7 +2512,8 @@ class I {
 class C implements I {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
@@ -2534,7 +2526,8 @@ abstract class A {
 class C extends A {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
@@ -2547,7 +2540,8 @@ class I {
 class C implements I {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
@@ -2560,12 +2554,14 @@ abstract class A {
 class C extends A {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_method_optionalParamCount() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_method_optionalParamCount() {
     // 7640
     Source source = addSource(r'''
 abstract class A {
@@ -2577,7 +2573,8 @@ abstract class B {
 class C implements A, B {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
@@ -2589,7 +2586,8 @@ abstract class A { get g1; get g2; }
 abstract class B implements A { get g1 => 1; }
 class C extends Object with B {}''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
   }
 
@@ -2600,7 +2598,8 @@ abstract class A { m1(); m2(); }
 abstract class B implements A { m1() => 1; }
 class C extends Object with B {}''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
   }
 
@@ -2611,11 +2610,13 @@ abstract class A { set s1(v); set s2(v); }
 abstract class B implements A { set s1(v) {} }
 class C extends Object with B {}''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_setter_and_implicitSetter() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_setter_and_implicitSetter() {
     // test from language/override_inheritance_abstract_test_14.dart
     Source source = addSource(r'''
 abstract class A {
@@ -2628,7 +2629,8 @@ class B extends A implements I {
   get field => 0;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
@@ -2641,7 +2643,8 @@ class I {
 class C implements I {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
@@ -2654,7 +2657,8 @@ abstract class A {
 class C extends A {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
@@ -2671,12 +2675,14 @@ abstract class B implements A {
 class C extends B {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_variable_fromInterface_missingGetter() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_variable_fromInterface_missingGetter() {
     // 16133
     Source source = addSource(r'''
 class I {
@@ -2686,12 +2692,14 @@ class C implements I {
   set v(_) {}
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_variable_fromInterface_missingSetter() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_variable_fromInterface_missingSetter() {
     // 16133
     Source source = addSource(r'''
 class I {
@@ -2701,7 +2709,8 @@ class C implements I {
   get v => 1;
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_ONE]);
     verify([source]);
   }
@@ -2716,7 +2725,8 @@ abstract class A {
 class C extends A {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_THREE]);
     verify([source]);
   }
@@ -2730,12 +2740,14 @@ abstract class A {
 class C extends A {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_TWO]);
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberTwo_variable_fromInterface_missingBoth() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberTwo_variable_fromInterface_missingBoth() {
     // 16133
     Source source = addSource(r'''
 class I {
@@ -2744,7 +2756,8 @@ class I {
 class C implements I {
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [StaticWarningCode.NON_ABSTRACT_CLASS_INHERITS_ABSTRACT_MEMBER_TWO]);
     verify([source]);
   }
@@ -3057,165 +3070,133 @@ f(int p) {
   }
 
   void test_typeAnnotationDeferredClass_asExpression() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
 f(var v) {
   v as a.A;
-}'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+}'''], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeAnnotationDeferredClass_catchClause() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
 f(var v) {
   try {
   } on a.A {
   }
-}'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+}'''], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeAnnotationDeferredClass_fieldFormalParameter() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
 class C {
   var v;
   C(a.A this.v);
-}'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+}'''], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeAnnotationDeferredClass_functionDeclaration_returnType() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
-a.A f() { return null; }'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+a.A f() { return null; }'''],
+          <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
-  void test_typeAnnotationDeferredClass_functionTypedFormalParameter_returnType() {
-    resolveWithErrors(<String>[
-      r'''
+  void
+      test_typeAnnotationDeferredClass_functionTypedFormalParameter_returnType() {
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
-f(a.A g()) {}'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+f(a.A g()) {}'''],
+          <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeAnnotationDeferredClass_isExpression() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
 f(var v) {
   bool b = v is a.A;
-}'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+}'''], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeAnnotationDeferredClass_methodDeclaration_returnType() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
 class C {
   a.A m() { return null; }
-}'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+}'''], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeAnnotationDeferredClass_simpleFormalParameter() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
-f(a.A v) {}'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+f(a.A v) {}'''], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeAnnotationDeferredClass_typeArgumentList() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
 class C<E> {}
-C<a.A> c;'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+C<a.A> c;'''], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeAnnotationDeferredClass_typeArgumentList2() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
 class C<E, F> {}
-C<a.A, a.A> c;'''
-    ], <ErrorCode>[
-      StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS,
-      StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS
-    ]);
+C<a.A, a.A> c;'''],
+          <ErrorCode>[
+              StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS,
+              StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeAnnotationDeferredClass_typeParameter_bound() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
-class C<E extends a.A> {}'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+class C<E extends a.A> {}'''],
+          <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeAnnotationDeferredClass_variableDeclarationList() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-class A {}''',
-      r'''
+class A {}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
-a.A v;'''
-    ], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
+a.A v;'''], <ErrorCode>[StaticWarningCode.TYPE_ANNOTATION_DEFERRED_CLASS]);
   }
 
   void test_typeParameterReferencedByStatic_field() {
@@ -3225,7 +3206,8 @@ class A<K> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
+        source,
+        [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
     verify([source]);
   }
 
@@ -3236,7 +3218,8 @@ class A<K> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
+        source,
+        [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
     verify([source]);
   }
 
@@ -3249,7 +3232,8 @@ class A<K> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
+        source,
+        [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
     verify([source]);
   }
 
@@ -3260,7 +3244,8 @@ class A<K> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
+        source,
+        [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
     verify([source]);
   }
 
@@ -3271,7 +3256,8 @@ class A<K> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
+        source,
+        [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
     verify([source]);
   }
 
@@ -3282,7 +3268,8 @@ class A<K> {
 }''');
     resolve(source);
     assertErrors(
-        source, [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
+        source,
+        [StaticWarningCode.TYPE_PARAMETER_REFERENCED_BY_STATIC]);
     verify([source]);
   }
 

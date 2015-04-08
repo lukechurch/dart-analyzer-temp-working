@@ -22,78 +22,86 @@ import 'sdk.dart' show DartSdk;
 import 'source_io.dart' show FileBasedSource;
 
 /**
- * A function that is used to visit [ContentCache] entries.
+ * A function that is used to handle [ContentCache] entries.
  */
-typedef void ContentCacheVisitor(String fullPath, int stamp, String contents);
+typedef void ContentCacheVisitor(Source source, int stamp, String contents);
 
 /**
- * A cache used to override the default content of a [Source].
+ * Instances of class `ContentCache` hold content used to override the default content of a
+ * [Source].
  */
 class ContentCache {
   /**
-   * A table mapping the full path of sources to the contents of those sources.
-   * This is used to override the default contents of a source.
+   * A table mapping sources to the contents of those sources. This is used to override the default
+   * contents of a source.
    */
-  HashMap<String, String> _contentMap = new HashMap<String, String>();
+  HashMap<Source, String> _contentMap = new HashMap<Source, String>();
 
   /**
-   * A table mapping the full path of sources to the modification stamps of
-   * those sources. This is used when the default contents of a source has been
-   * overridden.
+   * A table mapping sources to the modification stamps of those sources. This is used when the
+   * default contents of a source has been overridden.
    */
-  HashMap<String, int> _stampMap = new HashMap<String, int>();
+  HashMap<Source, int> _stampMap = new HashMap<Source, int>();
 
   /**
    * Visit all entries of this cache.
    */
   void accept(ContentCacheVisitor visitor) {
-    _contentMap.forEach((String fullPath, String contents) {
-      int stamp = _stampMap[fullPath];
-      visitor(fullPath, stamp, contents);
+    _contentMap.forEach((Source source, String contents) {
+      int stamp = _stampMap[source];
+      visitor(source, stamp, contents);
     });
   }
 
   /**
-   * Return the contents of the given [source], or `null` if this cache does not
-   * override the contents of the source.
+   * Return the contents of the given source, or `null` if this cache does not override the
+   * contents of the source.
    *
    * <b>Note:</b> This method is not intended to be used except by
    * [AnalysisContext.getContents].
+   *
+   * @param source the source whose content is to be returned
+   * @return the contents of the given source
    */
-  String getContents(Source source) => _contentMap[source.fullName];
+  String getContents(Source source) => _contentMap[source];
 
   /**
-   * Return the modification stamp of the given [source], or `null` if this
-   * cache does not override the contents of the source.
+   * Return the modification stamp of the given source, or `null` if this cache does not
+   * override the contents of the source.
    *
    * <b>Note:</b> This method is not intended to be used except by
    * [AnalysisContext.getModificationStamp].
+   *
+   * @param source the source whose modification stamp is to be returned
+   * @return the modification stamp of the given source
    */
-  int getModificationStamp(Source source) => _stampMap[source.fullName];
+  int getModificationStamp(Source source) => _stampMap[source];
 
   /**
-   * Set the contents of the given [source] to the given [contents]. This has
-   * the effect of overriding the default contents of the source. If the
-   * contents are `null` the override is removed so that the default contents
-   * will be returned.
+   * Set the contents of the given source to the given contents. This has the effect of overriding
+   * the default contents of the source. If the contents are `null` the override is removed so
+   * that the default contents will be returned.
+   *
+   * @param source the source whose contents are being overridden
+   * @param contents the new contents of the source
+   * @return the original cached contents or `null` if none
    */
   String setContents(Source source, String contents) {
-    String fullName = source.fullName;
     if (contents == null) {
-      _stampMap.remove(fullName);
-      return _contentMap.remove(fullName);
+      _stampMap.remove(source);
+      return _contentMap.remove(source);
     } else {
       int newStamp = JavaSystem.currentTimeMillis();
-      int oldStamp = _stampMap[fullName];
-      _stampMap[fullName] = newStamp;
+      int oldStamp = _stampMap[source];
+      _stampMap[source] = newStamp;
       // Occasionally, if this method is called in rapid succession, the
       // timestamps are equal. Guard against this by artificially incrementing
       // the new timestamp.
       if (newStamp == oldStamp) {
-        _stampMap[fullName] = newStamp + 1;
+        _stampMap[source] = newStamp + 1;
       }
-      String oldContent = _contentMap[fullName];
-      _contentMap[fullName] = contents;
+      String oldContent = _contentMap[source];
+      _contentMap[source] = contents;
       return oldContent;
     }
   }
@@ -616,8 +624,8 @@ class SourceFactory {
   /// A table mapping package names to paths of directories containing
   /// the package (or [null] if there is no registered package URI resolver).
   Map<String, List<Folder>> get packageMap {
-    PackageMapUriResolver resolver = _resolvers.firstWhere(
-        (r) => r is PackageMapUriResolver, orElse: () => null);
+    PackageMapUriResolver resolver =
+        _resolvers.firstWhere((r) => r is PackageMapUriResolver, orElse: () => null);
     return resolver != null ? resolver.packageMap : null;
   }
 
@@ -673,8 +681,7 @@ class SourceFactory {
   Source fromEncoding(String encoding) {
     Source source = forUri(encoding);
     if (source == null) {
-      throw new IllegalArgumentException(
-          "Invalid source encoding: '$encoding'");
+      throw new IllegalArgumentException("Invalid source encoding: '$encoding'");
     }
     return source;
   }
@@ -704,7 +711,8 @@ class SourceFactory {
     try {
       // Force the creation of an escaped URI to deal with spaces, etc.
       return _internalResolveUri(
-          containingSource, parseUriWithException(containedUri));
+          containingSource,
+          parseUriWithException(containedUri));
     } catch (exception, stackTrace) {
       String containingFullName =
           containingSource != null ? containingSource.fullName : '<null>';

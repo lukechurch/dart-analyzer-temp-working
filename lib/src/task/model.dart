@@ -9,19 +9,19 @@ import 'package:analyzer/src/task/inputs.dart';
 import 'package:analyzer/task/model.dart';
 
 /**
- * A concrete implementation of a [CompositeResultDescriptor].
+ * A concrete implementation of a [ContributionPoint].
  */
-class CompositeResultDescriptorImpl<V> extends ResultDescriptorImpl<V>
-    implements CompositeResultDescriptor<V> {
+class ContributionPointImpl<V> extends ResultDescriptorImpl<V> implements
+    ContributionPoint<V> {
   /**
    * The results that contribute to this result.
    */
   final List<ResultDescriptor<V>> contributors = <ResultDescriptor<V>>[];
 
   /**
-   * Initialize a newly created composite result to have the given [name].
+   * Initialize a newly created contribution point to have the given [name].
    */
-  CompositeResultDescriptorImpl(String name) : super(name, null);
+  ContributionPointImpl(String name) : super(name, null);
 
   /**
    * Record that the given analysis [result] contibutes to this result.
@@ -29,25 +29,6 @@ class CompositeResultDescriptorImpl<V> extends ResultDescriptorImpl<V>
   void recordContributor(ResultDescriptor<V> result) {
     contributors.add(result);
   }
-}
-
-/**
- * A concrete implementation of a [ListResultDescriptor].
- */
-class ListResultDescriptorImpl<E> extends ResultDescriptorImpl<List<E>>
-    implements ListResultDescriptor<E> {
-  /**
-   * Initialize a newly created analysis result to have the given [name] and
-   * [defaultValue]. If a composite result is specified, then this result will
-   * contribute to it.
-   */
-  ListResultDescriptorImpl(String name, List<E> defaultValue,
-      {CompositeResultDescriptor contributesTo})
-      : super(name, defaultValue, contributesTo: contributesTo);
-
-  @override
-  ListTaskInput<E> of(AnalysisTarget target) =>
-      new ListTaskInputImpl<E>(target, this);
 }
 
 /**
@@ -66,18 +47,18 @@ class ResultDescriptorImpl<V> implements ResultDescriptor<V> {
 
   /**
    * Initialize a newly created analysis result to have the given [name] and
-   * [defaultValue]. If a composite result is specified, then this result will
+   * [defaultValue]. If a contribution point is specified, then this result will
    * contribute to it.
    */
   ResultDescriptorImpl(this.name, this.defaultValue,
-      {CompositeResultDescriptor contributesTo}) {
-    if (contributesTo is CompositeResultDescriptorImpl) {
+      {ContributionPoint contributesTo}) {
+    if (contributesTo is ContributionPointImpl) {
       contributesTo.recordContributor(this);
     }
   }
 
   @override
-  TaskInput<V> of(AnalysisTarget target) =>
+  TaskInput<V> inputFor(AnalysisTarget target) =>
       new SimpleTaskInput<V>(target, this);
 
   @override
@@ -116,8 +97,8 @@ class TaskDescriptorImpl implements TaskDescriptor {
    * and produces the given [results]. The [buildTask] will be used to create
    * the instance of [AnalysisTask] thusly described.
    */
-  TaskDescriptorImpl(
-      this.name, this.buildTask, this.createTaskInputs, this.results);
+  TaskDescriptorImpl(this.name, this.buildTask, this.createTaskInputs,
+      this.results);
 
   @override
   AnalysisTask createTask(AnalysisContext context, AnalysisTarget target,

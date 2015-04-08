@@ -15,6 +15,7 @@ import '../reflective_tests.dart';
 import 'resolver_test.dart';
 import 'test_support.dart';
 
+
 main() {
   _ut.groupSep = ' | ';
   runReflectiveTests(NonErrorResolverTest);
@@ -762,10 +763,12 @@ abstract class A {
     verify([source]);
     CompilationUnit unit = analysisContext.parseCompilationUnit(source);
     {
-      SimpleIdentifier ref = EngineTestCase.findNode(
-          unit, code, "p]", (node) => node is SimpleIdentifier);
-      EngineTestCase.assertInstanceOf((obj) => obj is ParameterElement,
-          ParameterElement, ref.staticElement);
+      SimpleIdentifier ref =
+          EngineTestCase.findNode(unit, code, "p]", (node) => node is SimpleIdentifier);
+      EngineTestCase.assertInstanceOf(
+          (obj) => obj is ParameterElement,
+          ParameterElement,
+          ref.staticElement);
     }
   }
 
@@ -779,10 +782,12 @@ foo(int p) {
     assertNoErrors(source);
     verify([source]);
     CompilationUnit unit = analysisContext.parseCompilationUnit(source);
-    SimpleIdentifier ref = EngineTestCase.findNode(
-        unit, code, "p]", (node) => node is SimpleIdentifier);
+    SimpleIdentifier ref =
+        EngineTestCase.findNode(unit, code, "p]", (node) => node is SimpleIdentifier);
     EngineTestCase.assertInstanceOf(
-        (obj) => obj is ParameterElement, ParameterElement, ref.staticElement);
+        (obj) => obj is ParameterElement,
+        ParameterElement,
+        ref.staticElement);
   }
 
   void test_commentReference_beforeFunction_expressionBody() {
@@ -794,10 +799,12 @@ foo(int p) => null;''';
     assertNoErrors(source);
     verify([source]);
     CompilationUnit unit = analysisContext.parseCompilationUnit(source);
-    SimpleIdentifier ref = EngineTestCase.findNode(
-        unit, code, "p]", (node) => node is SimpleIdentifier);
+    SimpleIdentifier ref =
+        EngineTestCase.findNode(unit, code, "p]", (node) => node is SimpleIdentifier);
     EngineTestCase.assertInstanceOf(
-        (obj) => obj is ParameterElement, ParameterElement, ref.staticElement);
+        (obj) => obj is ParameterElement,
+        ParameterElement,
+        ref.staticElement);
   }
 
   void test_commentReference_beforeMethod() {
@@ -814,16 +821,20 @@ abstract class A {
     verify([source]);
     CompilationUnit unit = analysisContext.parseCompilationUnit(source);
     {
-      SimpleIdentifier ref = EngineTestCase.findNode(
-          unit, code, "p1]", (node) => node is SimpleIdentifier);
-      EngineTestCase.assertInstanceOf((obj) => obj is ParameterElement,
-          ParameterElement, ref.staticElement);
+      SimpleIdentifier ref =
+          EngineTestCase.findNode(unit, code, "p1]", (node) => node is SimpleIdentifier);
+      EngineTestCase.assertInstanceOf(
+          (obj) => obj is ParameterElement,
+          ParameterElement,
+          ref.staticElement);
     }
     {
-      SimpleIdentifier ref = EngineTestCase.findNode(
-          unit, code, "p2]", (node) => node is SimpleIdentifier);
-      EngineTestCase.assertInstanceOf((obj) => obj is ParameterElement,
-          ParameterElement, ref.staticElement);
+      SimpleIdentifier ref =
+          EngineTestCase.findNode(unit, code, "p2]", (node) => node is SimpleIdentifier);
+      EngineTestCase.assertInstanceOf(
+          (obj) => obj is ParameterElement,
+          ParameterElement,
+          ref.staticElement);
     }
   }
 
@@ -839,9 +850,14 @@ class A {
     verify([source]);
     CompilationUnit unit = analysisContext.parseCompilationUnit(source);
     SimpleIdentifier ref = EngineTestCase.findNode(
-        unit, code, "foo]", (node) => node is SimpleIdentifier);
+        unit,
+        code,
+        "foo]",
+        (node) => node is SimpleIdentifier);
     EngineTestCase.assertInstanceOf(
-        (obj) => obj is MethodElement, MethodElement, ref.staticElement);
+        (obj) => obj is MethodElement,
+        MethodElement,
+        ref.staticElement);
   }
 
   void test_commentReference_setter() {
@@ -863,15 +879,25 @@ class B extends A {
     CompilationUnit unit = analysisContext.parseCompilationUnit(source);
     {
       SimpleIdentifier ref = EngineTestCase.findNode(
-          unit, code, "x] in A", (node) => node is SimpleIdentifier);
-      EngineTestCase.assertInstanceOf((obj) => obj is PropertyAccessorElement,
-          PropertyAccessorElement, ref.staticElement);
+          unit,
+          code,
+          "x] in A",
+          (node) => node is SimpleIdentifier);
+      EngineTestCase.assertInstanceOf(
+          (obj) => obj is PropertyAccessorElement,
+          PropertyAccessorElement,
+          ref.staticElement);
     }
     {
       SimpleIdentifier ref = EngineTestCase.findNode(
-          unit, code, "x] in B", (node) => node is SimpleIdentifier);
-      EngineTestCase.assertInstanceOf((obj) => obj is PropertyAccessorElement,
-          PropertyAccessorElement, ref.staticElement);
+          unit,
+          code,
+          "x] in B",
+          (node) => node is SimpleIdentifier);
+      EngineTestCase.assertInstanceOf(
+          (obj) => obj is PropertyAccessorElement,
+          PropertyAccessorElement,
+          ref.staticElement);
     }
   }
 
@@ -933,15 +959,6 @@ class A {
     verify([source]);
   }
 
-  void test_const_dynamic() {
-    Source source = addSource('''
-const Type d = dynamic;
-''');
-    resolve(source);
-    assertNoErrors(source);
-    verify([source]);
-  }
-
   void test_constConstructorWithNonConstSuper_explicit() {
     Source source = addSource(r'''
 class A {
@@ -980,7 +997,8 @@ class B extends A {
   const B(): super();
 }''');
     resolve(source);
-    assertErrors(source,
+    assertErrors(
+        source,
         [CompileTimeErrorCode.UNDEFINED_CONSTRUCTOR_IN_INITIALIZER_DEFAULT]);
     verify([source]);
   }
@@ -1033,19 +1051,16 @@ class A {
   }
 
   void test_constDeferredClass_new() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
 class A {
   const A.b();
-}''',
-      r'''
+}''', r'''
 library root;
 import 'lib1.dart' deferred as a;
 main() {
   new a.A.b();
-}'''
-    ], <ErrorCode>[]);
+}'''], <ErrorCode>[]);
   }
 
   void test_constEval_functionTypeLiteral() {
@@ -1676,18 +1691,6 @@ class D extends C {
     verify([source]);
   }
 
-  void test_functionWithoutCall_staticCallMethod() {
-    Source source = addSource(r'''
-class A { }
-class B extends A {
-  static call() { }
-}
-''');
-    resolve(source);
-    assertNoErrors(source);
-    verify([source]);
-  }
-
   void test_functionWithoutCall_withNoSuchMethod() {
     // 16078
     Source source = addSource(r'''
@@ -1881,11 +1884,9 @@ import 'lib.dart';
 import 'lib.dart';''');
     addNamedSource("/lib.dart", "library lib;");
     resolve(source);
-    assertErrors(source, [
-      HintCode.UNUSED_IMPORT,
-      HintCode.UNUSED_IMPORT,
-      HintCode.DUPLICATE_IMPORT
-    ]);
+    assertErrors(
+        source,
+        [HintCode.UNUSED_IMPORT, HintCode.UNUSED_IMPORT, HintCode.DUPLICATE_IMPORT]);
     verify([source]);
   }
 
@@ -2820,16 +2821,13 @@ var v2 = const <int> [42];''');
   }
 
   void test_loadLibraryDefined() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-foo() => 22;''',
-      r'''
+foo() => 22;''', r'''
 import 'lib1.dart' deferred as other;
 main() {
   other.loadLibrary().then((_) => other.foo());
-}'''
-    ], <ErrorCode>[]);
+}'''], <ErrorCode>[]);
   }
 
   void test_local_generator_async() {
@@ -3145,7 +3143,8 @@ f() {
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_abstractsDontOverrideConcretes_getter() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_abstractsDontOverrideConcretes_getter() {
     Source source = addSource(r'''
 class A {
   int get g => 0;
@@ -3159,7 +3158,8 @@ class C extends B {}''');
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_abstractsDontOverrideConcretes_method() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_abstractsDontOverrideConcretes_method() {
     Source source = addSource(r'''
 class A {
   m(p) {}
@@ -3173,7 +3173,8 @@ class C extends B {}''');
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_abstractsDontOverrideConcretes_setter() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_abstractsDontOverrideConcretes_setter() {
     Source source = addSource(r'''
 class A {
   set s(v) {}
@@ -3187,7 +3188,8 @@ class C extends B {}''');
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_classTypeAlias_interface() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_classTypeAlias_interface() {
     // 15979
     Source source = addSource(r'''
 abstract class M {}
@@ -3214,7 +3216,8 @@ abstract class B = A with M;''');
     verify([source]);
   }
 
-  void test_nonAbstractClassInheritsAbstractMemberOne_classTypeAlias_superclass() {
+  void
+      test_nonAbstractClassInheritsAbstractMemberOne_classTypeAlias_superclass() {
     // 15979
     Source source = addSource(r'''
 class M {}
@@ -3778,15 +3781,6 @@ class A {
     verify([source]);
   }
 
-  void test_parameterDefaultDoesNotReferToParameterName() {
-    // The final "f" should refer to the toplevel function "f", not to the
-    // parameter called "f".  See dartbug.com/13179.
-    Source source = addSource('void f([void f([x]) = f]) {}');
-    resolve(source);
-    assertNoErrors(source);
-    verify([source]);
-  }
-
   void test_parameterScope_local() {
     // Parameter names shouldn't conflict with the name of the function they
     // are enclosed in.
@@ -4340,23 +4334,18 @@ class _InvertedCodec<T2, S2> extends Codec<T2, S2> {
   }
 
   void test_sharedDeferredPrefix() {
-    resolveWithErrors(<String>[
-      r'''
+    resolveWithErrors(<String>[r'''
 library lib1;
-f1() {}''',
-      r'''
+f1() {}''', r'''
 library lib2;
-f2() {}''',
-      r'''
+f2() {}''', r'''
 library lib3;
-f3() {}''',
-      r'''
+f3() {}''', r'''
 library root;
 import 'lib1.dart' deferred as lib1;
 import 'lib2.dart' as lib;
 import 'lib3.dart' as lib;
-main() { lib1.f1(); lib.f2(); lib.f3(); }'''
-    ], <ErrorCode>[]);
+main() { lib1.f1(); lib.f2(); lib.f3(); }'''], <ErrorCode>[]);
   }
 
   void test_staticAccessToInstanceMember_annotation() {
@@ -4500,7 +4489,8 @@ main(Object p) {
     verify([source]);
   }
 
-  void test_typePromotion_booleanAnd_useInRight_accessedInClosureRight_noAssignment() {
+  void
+      test_typePromotion_booleanAnd_useInRight_accessedInClosureRight_noAssignment() {
     Source source = addSource(r'''
 callMe(f()) { f(); }
 main(Object p) {
@@ -4537,7 +4527,8 @@ main(Object p) {
     verify([source]);
   }
 
-  void test_typePromotion_conditional_useInThen_accessedInClosure_noAssignment() {
+  void
+      test_typePromotion_conditional_useInThen_accessedInClosure_noAssignment() {
     Source source = addSource(r'''
 callMe(f()) { f(); }
 main(Object p) {
@@ -5382,8 +5373,8 @@ f() sync* {
     verify([source]);
   }
 
-  void _check_wrongNumberOfParametersForOperator(
-      String name, String parameters) {
+  void _check_wrongNumberOfParametersForOperator(String name,
+      String parameters) {
     Source source = addSource("""
 class A {
   operator $name($parameters) {}

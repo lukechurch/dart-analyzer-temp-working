@@ -17,14 +17,17 @@ class GetContentTask extends SourceBasedAnalysisTask {
   /**
    * The task descriptor describing this kind of task.
    */
-  static final TaskDescriptor DESCRIPTOR = new TaskDescriptor('GET_CONTENT',
-      createTask, buildInputs, <ResultDescriptor>[CONTENT, MODIFICATION_TIME]);
+  static final TaskDescriptor DESCRIPTOR = new TaskDescriptor(
+      'GET_CONTENT',
+      createTask,
+      buildInputs,
+      <ResultDescriptor>[CONTENT, MODIFICATION_TIME]);
 
   /**
    * Initialize a newly created task to access the content of the source
    * associated with the given [target] in the given [context].
    */
-  GetContentTask(AnalysisContext context, AnalysisTarget target)
+  GetContentTask(InternalAnalysisContext context, AnalysisTarget target)
       : super(context, target);
 
   @override
@@ -51,8 +54,8 @@ class GetContentTask extends SourceBasedAnalysisTask {
    * Create a [GetContentTask] based on the given [target] in the given
    * [context].
    */
-  static GetContentTask createTask(
-      AnalysisContext context, AnalysisTarget target) {
+  static GetContentTask createTask(AnalysisContext context,
+      AnalysisTarget target) {
     return new GetContentTask(context, target);
   }
 }
@@ -71,7 +74,8 @@ abstract class SourceBasedAnalysisTask extends AnalysisTask {
   @override
   String get description {
     Source source = target.source;
-    String sourceName = source == null ? '<unknown source>' : source.fullName;
+    String sourceName =
+        target.source == null ? '<unknown source>' : source.fullName;
     return '${descriptor.name} for source $sourceName';
   }
 }

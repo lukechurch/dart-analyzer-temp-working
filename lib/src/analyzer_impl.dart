@@ -16,7 +16,6 @@ import 'package:analyzer/source/pub_package_map_provider.dart';
 import 'package:analyzer/src/error_formatter.dart';
 import 'package:analyzer/src/generated/java_core.dart' show JavaSystem;
 import 'package:analyzer/src/generated/java_engine.dart';
-import 'package:analyzer/src/generated/utilities_general.dart';
 
 import '../options.dart';
 import 'generated/constant.dart';
@@ -26,6 +25,7 @@ import 'generated/error.dart';
 import 'generated/java_io.dart';
 import 'generated/sdk_io.dart';
 import 'generated/source_io.dart';
+import 'package:analyzer/src/generated/utilities_general.dart';
 
 DirectoryBasedDartSdk sdk;
 
@@ -40,12 +40,6 @@ class AnalyzerImpl {
 
   final CommandLineOptions options;
   final int startTime;
-
-  /**
-   * True if the analyzer is running in batch mode.
-   */
-  final bool isBatch;
-
   ContentCache contentCache = new ContentCache();
 
   SourceFactory sourceFactory;
@@ -61,16 +55,7 @@ class AnalyzerImpl {
   final HashMap<Source, AnalysisErrorInfo> sourceErrorsMap =
       new HashMap<Source, AnalysisErrorInfo>();
 
-  /**
-   * If the file specified on the command line is part of a package, the name
-   * of that package.  Otherwise `null`.  This allows us to analyze the file
-   * specified on the command line as though it is reached via a "package:"
-   * URI, but avoid suppressing its output in the event that the user has not
-   * specified the "--package-warnings" option.
-   */
-  String _selfPackageName;
-
-  AnalyzerImpl(String sourcePath, this.options, this.startTime, this.isBatch)
+  AnalyzerImpl(String sourcePath, this.options, this.startTime)
       : sourcePath = _normalizeSourcePath(sourcePath) {
     if (sdk == null) {
       sdk = new DirectoryBasedDartSdk(new JavaFile(options.dartSdkPath));
@@ -110,7 +95,7 @@ class AnalyzerImpl {
     {
       UriKind uriKind = library.source.uriKind;
       // Optionally skip package: libraries.
-      if (!options.showPackageWarnings && _isOtherPackage(library.source.uri)) {
+      if (!options.showPackageWarnings && uriKind == UriKind.PACKAGE_URI) {
         return;
       }
       // Optionally skip SDK libraries.
@@ -153,48 +138,32 @@ class AnalyzerImpl {
     return _analyzeSync(printMode);
   }
 
-  Source computeLibrarySource() {
-    JavaFile sourceFile = new JavaFile(sourcePath);
-    Source source = sdk.fromFileUri(sourceFile.toURI());
-    if (source != null) {
-      return source;
-    }
-    source = new FileBasedSource.con2(sourceFile.toURI(), sourceFile);
-    Uri uri = context.sourceFactory.restoreUri(source);
-    if (uri == null) {
-      return source;
-    }
-    return new FileBasedSource.con2(uri, sourceFile);
-  }
-
-  /**
-   * Create and return the source factory to be used by the analysis context.
-   */
-  SourceFactory createSourceFactory() {
+  void prepareAnalysisContext(JavaFile sourceFile, Source source) {
     List<UriResolver> resolvers = [
-      new CustomUriResolver(options.customUrlMappings),
-      new DartUriResolver(sdk)
-    ];
-    if (options.packageRootPath != null) {
-      JavaFile packageDirectory = new JavaFile(options.packageRootPath);
-      resolvers.add(new PackageUriResolver([packageDirectory]));
-    } else {
-      PubPackageMapProvider pubPackageMapProvider =
-          new PubPackageMapProvider(PhysicalResourceProvider.INSTANCE, sdk);
-      PackageMapInfo packageMapInfo = pubPackageMapProvider.computePackageMap(
-          PhysicalResourceProvider.INSTANCE.getResource('.'));
-      Map<String, List<Folder>> packageMap = packageMapInfo.packageMap;
-      if (packageMap != null) {
-        resolvers.add(new PackageMapUriResolver(
-            PhysicalResourceProvider.INSTANCE, packageMap));
+        new CustomUriResolver(options.customUrlMappings),
+        new DartUriResolver(sdk),
+        new FileUriResolver()];
+    // may be add package resolver
+    {
+      JavaFile packageDirectory;
+      if (options.packageRootPath != null) {
+        packageDirectory = new JavaFile(options.packageRootPath);
+        resolvers.add(new PackageUriResolver([packageDirectory]));
+      } else {
+        PubPackageMapProvider pubPackageMapProvider =
+            new PubPackageMapProvider(PhysicalResourceProvider.INSTANCE, sdk);
+        PackageMapInfo packageMapInfo = pubPackageMapProvider.computePackageMap(
+            PhysicalResourceProvider.INSTANCE.getResource('.'));
+        Map<String, List<Folder>> packageMap = packageMapInfo.packageMap;
+        if (packageMap != null) {
+          resolvers.add(
+              new PackageMapUriResolver(
+                  PhysicalResourceProvider.INSTANCE,
+                  packageMap));
+        }
       }
     }
-    resolvers.add(new FileUriResolver());
-    return new SourceFactory(resolvers);
-  }
-
-  void prepareAnalysisContext() {
-    sourceFactory = createSourceFactory();
+    sourceFactory = new SourceFactory(resolvers);
     context = AnalysisEngine.instance.createAnalysisContext();
     context.sourceFactory = sourceFactory;
     Map<String, String> definedVariables = options.definedVariables;
@@ -211,23 +180,11 @@ class AnalyzerImpl {
     AnalysisOptionsImpl contextOptions = new AnalysisOptionsImpl();
     contextOptions.cacheSize = _MAX_CACHE_SIZE;
     contextOptions.hint = !options.disableHints;
-    contextOptions.enableStrictCallChecks = options.enableStrictCallChecks;
-    contextOptions.analyzeFunctionBodiesPredicate =
-        _analyzeFunctionBodiesPredicate;
-    contextOptions.generateImplicitErrors = options.showPackageWarnings;
-    contextOptions.generateSdkErrors = options.showSdkWarnings;
     context.analysisOptions = contextOptions;
-
-    librarySource = computeLibrarySource();
-
-    Uri libraryUri = librarySource.uri;
-    if (libraryUri.scheme == 'package' && libraryUri.pathSegments.length > 0) {
-      _selfPackageName = libraryUri.pathSegments[0];
-    }
 
     // Create and add a ChangeSet
     ChangeSet changeSet = new ChangeSet();
-    changeSet.addedSource(librarySource);
+    changeSet.addedSource(source);
     context.applyChanges(changeSet);
   }
 
@@ -256,8 +213,12 @@ class AnalyzerImpl {
     if (sourcePath == null) {
       throw new ArgumentError("sourcePath cannot be null");
     }
+    JavaFile sourceFile = new JavaFile(sourcePath);
+    Uri uri = getUri(sourceFile);
+    librarySource = new FileBasedSource.con2(uri, sourceFile);
+
     // prepare context
-    prepareAnalysisContext();
+    prepareAnalysisContext(sourceFile, librarySource);
   }
 
   /// The async version of the analysis
@@ -296,26 +257,6 @@ class AnalyzerImpl {
     });
   }
 
-  bool _analyzeFunctionBodiesPredicate(Source source) {
-    // TODO(paulberry): This function will need to be updated when we add the
-    // ability to suppress errors, warnings, and hints for files reached via
-    // custom URI's using the "--url-mapping" flag.
-    if (source.uri.scheme == 'dart') {
-      if (isBatch) {
-        // When running in batch mode, the SDK files are cached from one
-        // analysis run to the next.  So we need to parse function bodies even
-        // if the user hasn't asked for errors/warnings from the SDK, since
-        // they might ask for errors/warnings from the SDK in the future.
-        return true;
-      }
-      return options.showSdkWarnings;
-    }
-    if (_isOtherPackage(source.uri)) {
-      return options.showPackageWarnings;
-    }
-    return true;
-  }
-
   /// The sync version of analysis.
   ErrorSeverity _analyzeSync(int printMode) {
     // don't try to analyze parts
@@ -350,24 +291,8 @@ class AnalyzerImpl {
       return false;
     }
     if (computeSeverity(error, options.enableTypeChecks) ==
-            ErrorSeverity.INFO &&
+        ErrorSeverity.INFO &&
         options.disableHints) {
-      return false;
-    }
-    return true;
-  }
-
-  /**
-   * Determine whether the given URI refers to a package other than the package
-   * being analyzed.
-   */
-  bool _isOtherPackage(Uri uri) {
-    if (uri.scheme != 'package') {
-      return false;
-    }
-    if (_selfPackageName != null &&
-        uri.pathSegments.length > 0 &&
-        uri.pathSegments[0] == _selfPackageName) {
       return false;
     }
     return true;
@@ -423,8 +348,8 @@ class AnalyzerImpl {
    * [enableTypeChecks] is false, then de-escalate checked-mode compile time
    * errors to a severity of [ErrorSeverity.INFO].
    */
-  static ErrorSeverity computeSeverity(
-      AnalysisError error, bool enableTypeChecks) {
+  static ErrorSeverity computeSeverity(AnalysisError error,
+      bool enableTypeChecks) {
     if (!enableTypeChecks &&
         error.errorCode.type == ErrorType.CHECKED_MODE_COMPILE_TIME_ERROR) {
       return ErrorSeverity.INFO;
@@ -446,6 +371,24 @@ class AnalyzerImpl {
     }
     // not found
     return null;
+  }
+
+  /**
+   * Returns the [Uri] for the given input file.
+   *
+   * Usually it is a `file:` [Uri], but if [file] is located in the `lib`
+   * directory of the [sdk], then returns a `dart:` [Uri].
+   */
+  static Uri getUri(JavaFile file) {
+    // may be file in SDK
+    {
+      Source source = sdk.fromFileUri(file.toURI());
+      if (source != null) {
+        return source.uri;
+      }
+    }
+    // some generic file
+    return file.toURI();
   }
 
   /**

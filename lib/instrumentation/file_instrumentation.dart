@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:analyzer/instrumentation/instrumentation.dart';
 
+
 /**
  * An [InstrumentationServer] that writes to a file.
  */
@@ -16,7 +17,7 @@ class FileInstrumentationServer implements InstrumentationServer {
 
   FileInstrumentationServer(String path) {
     File file = new File(path);
-    _sink = file.openWrite();
+    _sink = file.openWrite(mode: FileMode.APPEND);
   }
 
   @override

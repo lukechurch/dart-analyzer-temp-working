@@ -14,6 +14,7 @@ import 'package:watcher/watcher.dart';
 
 import 'file_system.dart';
 
+
 /**
  * An in-memory implementation of [ResourceProvider].
  * Use `/` as a path separator.
@@ -110,6 +111,17 @@ class MemoryResourceProvider implements ResourceProvider {
     return file;
   }
 
+  File updateFile(String path, String content, [int stamp]) {
+    path = posix.normalize(path);
+    newFolder(posix.dirname(path));
+    _MemoryFile file = new _MemoryFile(this, path);
+    _pathToResource[path] = file;
+    _pathToContent[path] = content;
+    _pathToTimestamp[path] = stamp != null ? stamp : nextStamp++;
+    _notifyWatchers(path, ChangeType.MODIFY);
+    return file;
+  }
+
   Folder newFolder(String path) {
     path = posix.normalize(path);
     if (!path.startsWith('/')) {
@@ -134,17 +146,6 @@ class MemoryResourceProvider implements ResourceProvider {
     }
   }
 
-  File updateFile(String path, String content, [int stamp]) {
-    path = posix.normalize(path);
-    newFolder(posix.dirname(path));
-    _MemoryFile file = new _MemoryFile(this, path);
-    _pathToResource[path] = file;
-    _pathToContent[path] = content;
-    _pathToTimestamp[path] = stamp != null ? stamp : nextStamp++;
-    _notifyWatchers(path, ChangeType.MODIFY);
-    return file;
-  }
-
   void _checkFileAtPath(String path) {
     _MemoryResource resource = _pathToResource[path];
     if (resource is! _MemoryFile) {
@@ -162,17 +163,18 @@ class MemoryResourceProvider implements ResourceProvider {
   }
 
   void _notifyWatchers(String path, ChangeType changeType) {
-    _pathToWatchers.forEach((String watcherPath,
-        List<StreamController<WatchEvent>> streamControllers) {
+    _pathToWatchers.forEach(
+        (String watcherPath, List<StreamController<WatchEvent>> streamControllers) {
       if (posix.isWithin(watcherPath, path)) {
-        for (StreamController<WatchEvent> streamController
-            in streamControllers) {
+        for (StreamController<WatchEvent> streamController in streamControllers)
+            {
           streamController.add(new WatchEvent(changeType, path));
         }
       }
     });
   }
 }
+
 
 /**
  * An in-memory implementation of [File] which acts like a symbolic link to a
@@ -206,12 +208,8 @@ class _MemoryDummyLink extends _MemoryResource implements File {
   bool isOrContains(String path) {
     return path == this.path;
   }
-
-  @override
-  String readAsStringSync() {
-    throw new FileSystemException(path, 'File could not be read');
-  }
 }
+
 
 /**
  * An in-memory implementation of [File].
@@ -220,13 +218,10 @@ class _MemoryFile extends _MemoryResource implements File {
   _MemoryFile(MemoryResourceProvider provider, String path)
       : super(provider, path);
 
-  @override
-  bool get exists => _provider._pathToResource[path] is _MemoryFile;
-
   int get modificationStamp {
     int stamp = _provider._pathToTimestamp[path];
     if (stamp == null) {
-      throw new FileSystemException(path, 'File "$path" does not exist.');
+      throw new FileSystemException(path, 'File does not exist.');
     }
     return stamp;
   }
@@ -234,7 +229,7 @@ class _MemoryFile extends _MemoryResource implements File {
   String get _content {
     String content = _provider._pathToContent[path];
     if (content == null) {
-      throw new FileSystemException(path, 'File "$path" does not exist.');
+      throw new FileSystemException(path, "File does not exist");
     }
     return content;
   }
@@ -251,47 +246,22 @@ class _MemoryFile extends _MemoryResource implements File {
   bool isOrContains(String path) {
     return path == this.path;
   }
-
-  @override
-  String readAsStringSync() {
-    String content = _provider._pathToContent[path];
-    if (content == null) {
-      throw new FileSystemException(path, 'File "$path" does not exist.');
-    }
-    return content;
-  }
 }
+
 
 /**
  * An in-memory implementation of [Source].
  */
 class _MemoryFileSource extends Source {
-  /**
-   * Map from encoded URI/filepath pair to a unique integer identifier.  This
-   * identifier is used for equality tests and hash codes.
-   *
-   * The URI and filepath are joined into a pair by separating them with an '@'
-   * character.
-   */
-  static final Map<String, int> _idTable = new HashMap<String, int>();
-
-  final _MemoryFile file;
+  final _MemoryFile _file;
 
   final Uri uri;
 
-  /**
-   * The unique ID associated with this [_MemoryFileSource].
-   */
-  final int id;
-
-  _MemoryFileSource(_MemoryFile file, Uri uri)
-      : uri = uri,
-        file = file,
-        id = _idTable.putIfAbsent('$uri@${file.path}', () => _idTable.length);
+  _MemoryFileSource(this._file, this.uri);
 
   @override
   TimestampedData<String> get contents {
-    return new TimestampedData<String>(modificationStamp, file._content);
+    return new TimestampedData<String>(modificationStamp, _file._content);
   }
 
   @override
@@ -300,10 +270,10 @@ class _MemoryFileSource extends Source {
   }
 
   @override
-  String get fullName => file.path;
+  String get fullName => _file.path;
 
   @override
-  int get hashCode => id;
+  int get hashCode => _file.hashCode;
 
   @override
   bool get isInSystemLibrary => uriKind == UriKind.DART_URI;
@@ -311,14 +281,14 @@ class _MemoryFileSource extends Source {
   @override
   int get modificationStamp {
     try {
-      return file.modificationStamp;
-    } on FileSystemException {
+      return _file.modificationStamp;
+    } on FileSystemException catch (e) {
       return -1;
     }
   }
 
   @override
-  String get shortName => file.shortName;
+  String get shortName => _file.shortName;
 
   @override
   UriKind get uriKind {
@@ -335,11 +305,14 @@ class _MemoryFileSource extends Source {
 
   @override
   bool operator ==(other) {
-    return other is _MemoryFileSource && other.id == id;
+    if (other is _MemoryFileSource) {
+      return other._file == _file;
+    }
+    return false;
   }
 
   @override
-  bool exists() => file.exists;
+  bool exists() => _file.exists;
 
   @override
   Uri resolveRelativeUri(Uri relativeUri) {
@@ -347,8 +320,9 @@ class _MemoryFileSource extends Source {
   }
 
   @override
-  String toString() => file.toString();
+  String toString() => _file.toString();
 }
+
 
 /**
  * An in-memory implementation of [Folder].
@@ -356,7 +330,6 @@ class _MemoryFileSource extends Source {
 class _MemoryFolder extends _MemoryResource implements Folder {
   _MemoryFolder(MemoryResourceProvider provider, String path)
       : super(provider, path);
-
   @override
   Stream<WatchEvent> get changes {
     StreamController<WatchEvent> streamController =
@@ -373,9 +346,6 @@ class _MemoryFolder extends _MemoryResource implements Folder {
     });
     return streamController.stream;
   }
-
-  @override
-  bool get exists => _provider._pathToResource[path] is _MemoryFolder;
 
   @override
   String canonicalizePath(String relPath) {
@@ -401,20 +371,7 @@ class _MemoryFolder extends _MemoryResource implements Folder {
   }
 
   @override
-  _MemoryFolder getChildAssumingFolder(String relPath) {
-    String childPath = canonicalizePath(relPath);
-    _MemoryResource resource = _provider._pathToResource[childPath];
-    if (resource is _MemoryFolder) {
-      return resource;
-    }
-    return new _MemoryFolder(_provider, childPath);
-  }
-
-  @override
   List<Resource> getChildren() {
-    if (!exists) {
-      throw new FileSystemException(path, 'Folder does not exist.');
-    }
     List<Resource> children = <Resource>[];
     _provider._pathToResource.forEach((resourcePath, resource) {
       if (posix.dirname(resourcePath) == path) {
@@ -433,6 +390,7 @@ class _MemoryFolder extends _MemoryResource implements Folder {
   }
 }
 
+
 /**
  * An in-memory implementation of [Resource].
  */
@@ -441,6 +399,9 @@ abstract class _MemoryResource implements Resource {
   final String path;
 
   _MemoryResource(this._provider, this.path);
+
+  @override
+  bool get exists => _provider._pathToResource.containsKey(path);
 
   @override
   get hashCode => path.hashCode;

@@ -5,21 +5,29 @@
 library analyzer.task.dart;
 
 import 'package:analyzer/src/generated/ast.dart';
+import 'package:analyzer/src/generated/element.dart';
 import 'package:analyzer/src/generated/error.dart';
 import 'package:analyzer/src/generated/scanner.dart';
 import 'package:analyzer/src/generated/source.dart';
+import 'package:analyzer/task/general.dart';
 import 'package:analyzer/task/model.dart';
 
 /**
- * The analysis errors associated with a target.
+ * The compilation unit associated with a [Source] after it has had all
+ * declarations bound to the element defined by the declaration.
  *
- * The value combines errors represented by multiple other results.
+ * The result is only available for targets representing a Dart compilation unit.
  */
-// TODO(brianwilkerson) If we want to associate errors with targets smaller than
-// a file, we will need other contribution points to collect them. In which case
-// we might want to rename this and/or document that it applies to files.
-final CompositeResultDescriptor<List<AnalysisError>> DART_ERRORS =
-    new CompositeResultDescriptor<List<AnalysisError>>('DART_ERRORS');
+final ResultDescriptor<CompilationUnit> BUILT_UNIT =
+    new ResultDescriptor<CompilationUnit>('BUILT_UNIT', null);
+
+/**
+ * The element model associated with a single compilation unit.
+ *
+ * The result is only available for targets representing a Dart compilation unit.
+ */
+final ResultDescriptor<CompilationUnitElement> COMPILATION_UNIT_ELEMENT =
+    new ResultDescriptor<CompilationUnitElement>('COMPILATION_UNIT_ELEMENT', null);
 
 /**
  * The sources of the libraries that are exported from a library.
@@ -29,28 +37,19 @@ final CompositeResultDescriptor<List<AnalysisError>> DART_ERRORS =
  *
  * The result is only available for targets representing a Dart library.
  */
-final ListResultDescriptor<Source> EXPORTED_LIBRARIES =
-    new ListResultDescriptor<Source>('EXPORTED_LIBRARIES', Source.EMPTY_ARRAY);
-
-/**
- * A flag specifying whether a library imports 'dart:html'.
- *
- * The result is only available for targets representing a Dart library.
- */
-final ResultDescriptor<bool> HAS_HTML_IMPORT =
-    new ResultDescriptor<bool>('HAS_HTML_IMPORT', false);
+final ResultDescriptor<List<Source>> EXPORTED_LIBRARIES =
+    new ResultDescriptor<List<Source>>('EXPORTED_LIBRARIES', Source.EMPTY_ARRAY);
 
 /**
  * The sources of the libraries that are imported into a library.
  *
- * Not `null`.
- * The default value is empty.
- * When computed, this list will always contain at least `dart:core` source.
+ * The list will be empty if there are no imported libraries, but will not be
+ * `null`.
  *
  * The result is only available for targets representing a Dart library.
  */
-final ListResultDescriptor<Source> IMPORTED_LIBRARIES =
-    new ListResultDescriptor<Source>('IMPORTED_LIBRARIES', Source.EMPTY_ARRAY);
+final ResultDescriptor<List<Source>> IMPORTED_LIBRARIES =
+    new ResultDescriptor<List<Source>>('IMPORTED_LIBRARIES', Source.EMPTY_ARRAY);
 
 /**
  * The sources of the parts that are included in a library.
@@ -60,16 +59,21 @@ final ListResultDescriptor<Source> IMPORTED_LIBRARIES =
  *
  * The result is only available for targets representing a Dart library.
  */
-final ListResultDescriptor<Source> INCLUDED_PARTS =
-    new ListResultDescriptor<Source>('INCLUDED_PARTS', Source.EMPTY_ARRAY);
+final ResultDescriptor<List<Source>> INCLUDED_PARTS =
+    new ResultDescriptor<List<Source>>('INCLUDED_PARTS', Source.EMPTY_ARRAY);
 
 /**
- * A flag specifying whether a library is launchable.
+ * The errors produced while parsing a compilation unit.
  *
- * The result is only available for targets representing a Dart library.
+ * The list will be empty if there were no errors, but will not be `null`.
+ *
+ * The result is only available for targets representing a Dart compilation unit.
  */
-final ResultDescriptor<bool> IS_LAUNCHABLE =
-    new ResultDescriptor<bool>('IS_LAUNCHABLE', false);
+final ResultDescriptor<List<AnalysisError>> PARSE_ERRORS =
+    new ResultDescriptor<List<AnalysisError>>(
+        'PARSE_ERRORS',
+        AnalysisError.NO_ERRORS,
+        contributesTo: ANALYSIS_ERRORS);
 
 /**
  * The compilation unit AST produced while parsing a compilation unit.
@@ -82,12 +86,17 @@ final ResultDescriptor<CompilationUnit> PARSED_UNIT =
     new ResultDescriptor<CompilationUnit>('PARSED_UNIT', null);
 
 /**
- * The resolved [CompilationUnit] associated with a unit.
+ * The errors produced while scanning a compilation unit.
  *
- * The result is only available for targets representing a unit.
+ * The list will be empty if there were no errors, but will not be `null`.
+ *
+ * The result is only available for targets representing a Dart compilation unit.
  */
-final ResultDescriptor<CompilationUnit> RESOLVED_UNIT =
-    new ResultDescriptor<CompilationUnit>('RESOLVED_UNIT', null);
+final ResultDescriptor<List<AnalysisError>> SCAN_ERRORS =
+    new ResultDescriptor<List<AnalysisError>>(
+        'SCAN_ERRORS',
+        AnalysisError.NO_ERRORS,
+        contributesTo: ANALYSIS_ERRORS);
 
 /**
  * The token stream produced while scanning a compilation unit.
@@ -99,14 +108,3 @@ final ResultDescriptor<CompilationUnit> RESOLVED_UNIT =
  */
 final ResultDescriptor<Token> TOKEN_STREAM =
     new ResultDescriptor<Token>('TOKEN_STREAM', null);
-
-/**
- * The sources of the Dart files that a library consists of.
- *
- * The list will include the source of the defining unit and [INCLUDED_PARTS].
- * So, it is never empty or `null`.
- *
- * The result is only available for targets representing a Dart library.
- */
-final ListResultDescriptor<Source> UNITS =
-    new ListResultDescriptor<Source>('UNITS', Source.EMPTY_ARRAY);
