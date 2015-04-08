@@ -2337,7 +2337,8 @@ class DartEntryTest extends EngineTestCase {
     DartEntry entry = new DartEntry();
     expect(entry.allErrors, hasLength(0));
     entry.setValue(SourceEntry.CONTENT_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(source, ScannerErrorCode.UNABLE_GET_CONTENT)
+      new AnalysisError.con1(
+          source, ScannerErrorCode.UNABLE_GET_CONTENT, ['exception details'])
     ]);
     entry.setValue(DartEntry.SCAN_ERRORS, <AnalysisError>[
       new AnalysisError.con1(
@@ -5490,6 +5491,11 @@ class TestAnalysisContext implements InternalAnalysisContext {
   @override
   List<Source> get refactoringUnsafeSources {
     fail("Unexpected invocation of getRefactoringUnsafeSources");
+    return null;
+  }
+  @override
+  LibraryResolverFactory get libraryResolverFactory {
+    fail("Unexpected invocation of getLibraryResolverFactory");
     return null;
   }
   @override

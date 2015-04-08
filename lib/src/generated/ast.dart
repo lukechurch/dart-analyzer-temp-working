@@ -497,7 +497,7 @@ class ArgumentList extends AstNode {
    * then return the parameter element representing the parameter to which the
    * value of the given expression will be bound. Otherwise, return `null`.
    */
-  @deprecated // Use "expression.propagatedParameterElement"
+  @deprecated // Use "expression.staticParameterElement"
   ParameterElement getStaticParameterElementFor(Expression expression) {
     return _getStaticParameterElementFor(expression);
   }
@@ -865,7 +865,7 @@ class AssignmentExpression extends Expression {
    * representing the parameter to which the value of the right operand will be
    * bound. Otherwise, return `null`.
    */
-  @deprecated // Use "expression.propagatedParameterElement"
+  @deprecated // Use "expression.staticParameterElement"
   ParameterElement get staticParameterElementForRightHandSide {
     return _staticParameterElementForRightHandSide;
   }
@@ -3344,7 +3344,7 @@ class BinaryExpression extends Expression {
    * representing the parameter to which the value of the right operand will be
    * bound. Otherwise, return `null`.
    */
-  @deprecated // Use "expression.propagatedParameterElement"
+  @deprecated // Use "expression.staticParameterElement"
   ParameterElement get staticParameterElementForRightOperand {
     return _staticParameterElementForRightOperand;
   }
@@ -16730,11 +16730,13 @@ class StringLexemeHelper {
     }
     end = lexeme.length;
     if (isLast) {
-      if (StringUtilities.endsWith3(lexeme, 0x22, 0x22, 0x22) ||
-          StringUtilities.endsWith3(lexeme, 0x27, 0x27, 0x27)) {
+      if (start + 3 <= end &&
+          (StringUtilities.endsWith3(lexeme, 0x22, 0x22, 0x22) ||
+              StringUtilities.endsWith3(lexeme, 0x27, 0x27, 0x27))) {
         end -= 3;
-      } else if (StringUtilities.endsWithChar(lexeme, 0x22) ||
-          StringUtilities.endsWithChar(lexeme, 0x27)) {
+      } else if (start + 1 <= end &&
+          (StringUtilities.endsWithChar(lexeme, 0x22) ||
+              StringUtilities.endsWithChar(lexeme, 0x27))) {
         end -= 1;
       }
     }
@@ -18156,7 +18158,10 @@ class ToSourceVisitor implements AstVisitor<Object> {
     if (node.isCascaded) {
       _writer.print("..");
     } else {
-      _visitNodeWithSuffix(node.target, ".");
+      if (node.target != null) {
+        node.target.accept(this);
+        _writer.print(node.operator.lexeme);
+      }
     }
     _visitNode(node.methodName);
     _visitNode(node.argumentList);
