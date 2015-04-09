@@ -3269,6 +3269,36 @@ class B = Object with A {}''', [ParserErrorCode.EXPECTED_TOKEN]);
     parseExpression("m(f() => 0);", [ParserErrorCode.EXPECTED_TOKEN]);
   }
 
+  void test_importDirectivePartial_as() {
+    CompilationUnit unit = ParserTestCase.parseCompilationUnit(
+        "import 'b.dart' d as b;",
+        [ParserErrorCode.UNEXPECTED_TOKEN]);
+    ImportDirective importDirective = unit.childEntities.first;
+    expect(importDirective.asKeyword, isNotNull);
+    expect(unit.directives, hasLength(1));
+    expect(unit.declarations, hasLength(0));
+  }
+
+  void test_importDirectivePartial_show() {
+    CompilationUnit unit = ParserTestCase.parseCompilationUnit(
+        "import 'b.dart' d show foo;",
+        [ParserErrorCode.UNEXPECTED_TOKEN]);
+    ImportDirective importDirective = unit.childEntities.first;
+    expect(importDirective.combinators, hasLength(1));
+    expect(unit.directives, hasLength(1));
+    expect(unit.declarations, hasLength(0));
+  }
+
+  void test_importDirectivePartial_hide() {
+    CompilationUnit unit = ParserTestCase.parseCompilationUnit(
+        "import 'b.dart' d hide foo;",
+        [ParserErrorCode.UNEXPECTED_TOKEN]);
+    ImportDirective importDirective = unit.childEntities.first;
+    expect(importDirective.combinators, hasLength(1));
+    expect(unit.directives, hasLength(1));
+    expect(unit.declarations, hasLength(0));
+  }
+
   void test_incomplete_conditionalExpression() {
     parseExpression("x ? 0", [
       ParserErrorCode.EXPECTED_TOKEN,
@@ -4597,6 +4627,15 @@ class SimpleParserTest extends ParserTestCase {
 
   void test_function_literal_allowed_in_StringInterpolation_in_ConstructorFieldInitializer() {
     ParserTestCase.parseCompilationUnit("class C { C() : a = \"\${(){}}\"; }");
+  }
+
+  void test_import_as_show() {
+    ParserTestCase.parseCompilationUnit("import 'dart:math' as M show E;");
+  }
+
+  void test_import_show_hide() {
+    ParserTestCase.parseCompilationUnit(
+        "import 'import1_lib.dart' show hide, show hide ugly;");
   }
 
   void test_isFunctionDeclaration_nameButNoReturn_block() {

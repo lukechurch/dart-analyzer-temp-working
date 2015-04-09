@@ -188,13 +188,6 @@ class DeclarationMatcher extends RecursiveAstVisitor {
     _assertEquals(node.constKeyword != null, element.isConst);
     _assertEquals(node.factoryKeyword != null, element.isFactory);
     _assertCompatibleParameters(node.parameters, element.parameters);
-    // TODO(scheglov) debug null Location
-    if (element != null) {
-      if (element.context == null || element.source == null) {
-        logger.log(
-            'Bad constructor element $element for $node in ${node.parent}');
-      }
-    }
     // matches, update the existing element
     ExecutableElement newElement = node.element;
     node.element = element;
@@ -810,7 +803,7 @@ class IncrementalResolver {
   /**
    * The element for the library containing the compilation unit being resolved.
    */
-  LibraryElement _definingLibrary;
+  LibraryElementImpl _definingLibrary;
 
   /**
    * The [DartEntry] corresponding to the source being resolved.
@@ -894,6 +887,8 @@ class IncrementalResolver {
       _generateLints(rootNode);
       // update entry errors
       _updateEntry();
+      // notify library
+      _definingLibrary.afterIncrementalResolution();
       // OK
       return true;
     } finally {
