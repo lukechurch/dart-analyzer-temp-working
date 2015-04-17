@@ -79,16 +79,17 @@ class PackageMapUriResolver extends UriResolver {
     String sourcePath = source.fullName;
     Uri bestMatch;
     int bestMatchLength = -1;
+    pathos.Context pathContext = resourceProvider.pathContext;
     for (String pkgName in packageMap.keys) {
       List<Folder> pkgFolders = packageMap[pkgName];
       for (int i = 0; i < pkgFolders.length; i++) {
         Folder pkgFolder = pkgFolders[i];
         String pkgFolderPath = pkgFolder.path;
         if (pkgFolderPath.length > bestMatchLength &&
-            sourcePath.startsWith(pkgFolderPath + pathos.context.separator)) {
+            sourcePath.startsWith(pkgFolderPath + pathContext.separator)) {
           String relPath = sourcePath.substring(pkgFolderPath.length + 1);
           if (_isReversibleTranslation(pkgFolders, i, relPath)) {
-            List<String> relPathComponents = pathos.context.split(relPath);
+            List<String> relPathComponents = pathContext.split(relPath);
             String relUriPath = pathos.posix.joinAll(relPathComponents);
             bestMatch = Uri.parse('$PACKAGE_SCHEME:$pkgName/$relUriPath');
             bestMatchLength = pkgFolderPath.length;

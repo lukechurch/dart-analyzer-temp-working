@@ -219,6 +219,11 @@ class CompilationUnitElementHandle extends ElementHandle
   int get uriOffset => actualElement.uriOffset;
 
   @override
+  Element getElementAt(int offset) {
+    return actualElement.getElementAt(offset);
+  }
+
+  @override
   ClassElement getEnum(String enumName) => actualElement.getEnum(enumName);
 
   @override
@@ -595,6 +600,9 @@ class FieldElementHandle extends PropertyInducingElementHandle
 
   @override
   ElementKind get kind => ElementKind.FIELD;
+
+  @override
+  VariableDeclaration get node => actualElement.node;
 }
 
 /**
@@ -803,9 +811,6 @@ class LibraryElementHandle extends ElementHandle implements LibraryElement {
   List<LibraryElement> get visibleLibraries => actualElement.visibleLibraries;
 
   @override
-  Element getElementAt(int offset) => actualElement.getElementAt(offset);
-
-  @override
   List<ImportElement> getImportsWithPrefix(PrefixElement prefixElement) =>
       actualElement.getImportsWithPrefix(prefixElement);
 
@@ -835,6 +840,9 @@ class LocalVariableElementHandle extends VariableElementHandle
 
   @override
   ElementKind get kind => ElementKind.LOCAL_VARIABLE;
+
+  @override
+  VariableDeclaration get node => actualElement.node;
 
   @override
   SourceRange get visibleRange => actualElement.visibleRange;
@@ -1081,9 +1089,6 @@ abstract class VariableElementHandle extends ElementHandle
   @override
   bool get isPotentiallyMutatedInScope =>
       actualElement.isPotentiallyMutatedInScope;
-
-  @override
-  VariableDeclaration get node => actualElement.node;
 
   @override
   DartType get type => actualElement.type;

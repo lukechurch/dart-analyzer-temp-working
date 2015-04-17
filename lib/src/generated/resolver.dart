@@ -3301,7 +3301,7 @@ class ElementHolder {
 
   List<PropertyAccessorElement> get accessors {
     if (_accessors == null) {
-      return PropertyAccessorElementImpl.EMPTY_ARRAY;
+      return PropertyAccessorElement.EMPTY_LIST;
     }
     List<PropertyAccessorElement> result = _accessors;
     _accessors = null;
@@ -3310,7 +3310,7 @@ class ElementHolder {
 
   List<ConstructorElement> get constructors {
     if (_constructors == null) {
-      return ConstructorElementImpl.EMPTY_ARRAY;
+      return ConstructorElement.EMPTY_LIST;
     }
     List<ConstructorElement> result = _constructors;
     _constructors = null;
@@ -3319,7 +3319,7 @@ class ElementHolder {
 
   List<ClassElement> get enums {
     if (_enums == null) {
-      return ClassElementImpl.EMPTY_ARRAY;
+      return ClassElement.EMPTY_LIST;
     }
     List<ClassElement> result = _enums;
     _enums = null;
@@ -3328,7 +3328,7 @@ class ElementHolder {
 
   List<FieldElement> get fields {
     if (_fields == null) {
-      return FieldElementImpl.EMPTY_ARRAY;
+      return FieldElement.EMPTY_LIST;
     }
     List<FieldElement> result = _fields;
     _fields = null;
@@ -3337,7 +3337,7 @@ class ElementHolder {
 
   List<FieldElement> get fieldsWithoutFlushing {
     if (_fields == null) {
-      return FieldElementImpl.EMPTY_ARRAY;
+      return FieldElement.EMPTY_LIST;
     }
     List<FieldElement> result = _fields;
     return result;
@@ -3345,7 +3345,7 @@ class ElementHolder {
 
   List<FunctionElement> get functions {
     if (_functions == null) {
-      return FunctionElementImpl.EMPTY_ARRAY;
+      return FunctionElement.EMPTY_LIST;
     }
     List<FunctionElement> result = _functions;
     _functions = null;
@@ -3354,7 +3354,7 @@ class ElementHolder {
 
   List<LabelElement> get labels {
     if (_labels == null) {
-      return LabelElementImpl.EMPTY_ARRAY;
+      return LabelElement.EMPTY_LIST;
     }
     List<LabelElement> result = _labels;
     _labels = null;
@@ -3363,7 +3363,7 @@ class ElementHolder {
 
   List<LocalVariableElement> get localVariables {
     if (_localVariables == null) {
-      return LocalVariableElementImpl.EMPTY_ARRAY;
+      return LocalVariableElement.EMPTY_LIST;
     }
     List<LocalVariableElement> result = _localVariables;
     _localVariables = null;
@@ -3372,7 +3372,7 @@ class ElementHolder {
 
   List<MethodElement> get methods {
     if (_methods == null) {
-      return MethodElementImpl.EMPTY_ARRAY;
+      return MethodElement.EMPTY_LIST;
     }
     List<MethodElement> result = _methods;
     _methods = null;
@@ -3381,7 +3381,7 @@ class ElementHolder {
 
   List<ParameterElement> get parameters {
     if (_parameters == null) {
-      return ParameterElementImpl.EMPTY_ARRAY;
+      return ParameterElement.EMPTY_LIST;
     }
     List<ParameterElement> result = _parameters;
     _parameters = null;
@@ -3390,7 +3390,7 @@ class ElementHolder {
 
   List<TopLevelVariableElement> get topLevelVariables {
     if (_topLevelVariables == null) {
-      return TopLevelVariableElementImpl.EMPTY_ARRAY;
+      return TopLevelVariableElement.EMPTY_LIST;
     }
     List<TopLevelVariableElement> result = _topLevelVariables;
     _topLevelVariables = null;
@@ -3399,7 +3399,7 @@ class ElementHolder {
 
   List<FunctionTypeAliasElement> get typeAliases {
     if (_typeAliases == null) {
-      return FunctionTypeAliasElementImpl.EMPTY_ARRAY;
+      return FunctionTypeAliasElement.EMPTY_LIST;
     }
     List<FunctionTypeAliasElement> result = _typeAliases;
     _typeAliases = null;
@@ -3408,7 +3408,7 @@ class ElementHolder {
 
   List<TypeParameterElement> get typeParameters {
     if (_typeParameters == null) {
-      return TypeParameterElementImpl.EMPTY_ARRAY;
+      return TypeParameterElement.EMPTY_LIST;
     }
     List<TypeParameterElement> result = _typeParameters;
     _typeParameters = null;
@@ -3417,7 +3417,7 @@ class ElementHolder {
 
   List<ClassElement> get types {
     if (_types == null) {
-      return ClassElementImpl.EMPTY_ARRAY;
+      return ClassElement.EMPTY_LIST;
     }
     List<ClassElement> result = _types;
     _types = null;
@@ -4531,18 +4531,14 @@ class GatherUsedLocalElementsVisitor extends RecursiveAstVisitor {
     } else {
       _useIdentifierElement(node);
       if (element == null ||
-          element is! LocalElement && !identical(element, _enclosingExec)) {
+          element.enclosingElement is ClassElement &&
+              !identical(element, _enclosingExec)) {
         usedElements.members.add(node.name);
         if (isIdentifierRead) {
           usedElements.readMembers.add(node.name);
         }
       }
     }
-  }
-
-  @override
-  visitTypeName(TypeName node) {
-    _useIdentifierElement(node.name);
   }
 
   /**
@@ -4566,14 +4562,14 @@ class GatherUsedLocalElementsVisitor extends RecursiveAstVisitor {
     }
     // ignore places where the element is not actually used
     if (node.parent is TypeName) {
-      AstNode parent2 = node.parent.parent;
-      if (parent2 is IsExpression) {
-        return;
-      }
-      // We need to instantiate/extend/implement a class to actually use it.
-      // OTOH, function type aliases are used to define closure structures.
-      if (parent2 is VariableDeclarationList && element is ClassElement) {
-        return;
+      if (element is ClassElement) {
+        AstNode parent2 = node.parent.parent;
+        if (parent2 is IsExpression) {
+          return;
+        }
+        if (parent2 is VariableDeclarationList) {
+          return;
+        }
       }
     }
     // OK
@@ -7687,11 +7683,6 @@ class LibraryResolver {
   TypeProvider _typeProvider;
 
   /**
-   * The object used to access the types from the core library.
-   */
-  TypeProvider get typeProvider => _typeProvider;
-
-  /**
    * A table mapping library sources to the information being maintained for those libraries.
    */
   HashMap<Source, Library> _libraryMap = new HashMap<Source, Library>();
@@ -7727,6 +7718,11 @@ class LibraryResolver {
    * @return an array containing the libraries that were resolved
    */
   Set<Library> get resolvedLibraries => _librariesInCycles;
+
+  /**
+   * The object used to access the types from the core library.
+   */
+  TypeProvider get typeProvider => _typeProvider;
 
   /**
    * Create an object to represent the information about the library defined by the compilation unit
@@ -7914,6 +7910,18 @@ class LibraryResolver {
     //}
     _performConstantEvaluation();
     return targetLibrary.libraryElement;
+  }
+
+  /**
+   * Resolve the identifiers and perform type analysis in the libraries in the current cycle.
+   *
+   * @throws AnalysisException if any of the identifiers could not be resolved or if any of the
+   *           libraries could not have their types analyzed
+   */
+  void resolveReferencesAndTypes() {
+    for (Library library in _librariesInCycles) {
+      _resolveReferencesAndTypesInLibrary(library);
+    }
   }
 
   /**
@@ -8468,18 +8476,6 @@ class LibraryResolver {
         }
       }
     });
-  }
-
-  /**
-   * Resolve the identifiers and perform type analysis in the libraries in the current cycle.
-   *
-   * @throws AnalysisException if any of the identifiers could not be resolved or if any of the
-   *           libraries could not have their types analyzed
-   */
-  void resolveReferencesAndTypes() {
-    for (Library library in _librariesInCycles) {
-      _resolveReferencesAndTypesInLibrary(library);
-    }
   }
 
   /**
@@ -13276,15 +13272,15 @@ abstract class TypeProvider {
   InterfaceType get listType;
 
   /**
+   * Return the type representing the built-in type 'Map'.
+   */
+  InterfaceType get mapType;
+
+  /**
    * Return a list containing all of the types that cannot be either extended or
    * implemented.
    */
   List<InterfaceType> get nonSubtypableTypes;
-
-  /**
-   * Return the type representing the built-in type 'Map'.
-   */
-  InterfaceType get mapType;
 
   /**
    * Return a [DartObjectImpl] representing the `null` object.
@@ -13778,6 +13774,12 @@ class TypeResolverVisitor extends ScopedVisitor {
     SimpleIdentifier stackTrace = node.stackTraceParameter;
     if (stackTrace != null) {
       _recordType(stackTrace, typeProvider.stackTraceType);
+      Element element = stackTrace.staticElement;
+      if (element is VariableElementImpl) {
+        element.type = typeProvider.stackTraceType;
+      } else {
+        // TODO(brianwilkerson) Report the internal error
+      }
     }
     return null;
   }
@@ -14523,7 +14525,7 @@ class TypeResolverVisitor extends ScopedVisitor {
     } else if (type is FunctionType) {
       return type.typeArguments;
     }
-    return TypeImpl.EMPTY_ARRAY;
+    return DartType.EMPTY_LIST;
   }
 
   /**
@@ -14815,7 +14817,7 @@ class TypeResolverVisitor extends ScopedVisitor {
         aliasElement.typeParameters = alias.typeParameters;
         type.typeArguments = alias.type.typeArguments;
       } else {
-        type.typeArguments = TypeImpl.EMPTY_ARRAY;
+        type.typeArguments = DartType.EMPTY_LIST;
       }
     }
     element.type = type;
