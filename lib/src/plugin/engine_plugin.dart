@@ -4,11 +4,11 @@
 
 library analyzer.src.plugin.engine_plugin;
 
-import 'package:analyzer/plugin/plugin.dart';
 import 'package:analyzer/plugin/task.dart';
 import 'package:analyzer/src/task/dart.dart';
 import 'package:analyzer/src/task/general.dart';
 import 'package:analyzer/task/model.dart';
+import 'package:plugin/plugin.dart';
 
 /**
  * A plugin that defines the extension points and extensions that are inherently
@@ -36,6 +36,11 @@ class EnginePlugin implements Plugin {
    * Initialize a newly created plugin.
    */
   EnginePlugin();
+
+  /**
+   * Return a list containing all of the task descriptors that were contributed.
+   */
+  List<TaskDescriptor> get taskDescriptors => taskExtensionPoint.extensions;
 
   @override
   String get uniqueIdentifier => UNIQUE_IDENTIFIER;
@@ -80,13 +85,6 @@ class EnginePlugin implements Plugin {
     //
     // Register HTML tasks.
     //
-  }
-
-  /**
-   * Return a list containing all of the task descriptors that were contributed.
-   */
-  List<TaskDescriptor> taskDescriptors() {
-    return taskExtensionPoint.extensions;
   }
 
   /**
