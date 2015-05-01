@@ -15,13 +15,14 @@ import 'package:analyzer/src/generated/error.dart';
 import 'package:analyzer/src/generated/resolver.dart';
 import 'package:analyzer/src/generated/sdk.dart';
 import 'package:analyzer/src/generated/source.dart';
+import 'package:analyzer/src/plugin/engine_plugin.dart';
 import 'package:analyzer/src/task/dart.dart';
 import 'package:analyzer/src/task/driver.dart';
-import 'package:analyzer/src/task/general.dart';
 import 'package:analyzer/src/task/manager.dart';
 import 'package:analyzer/task/dart.dart';
 import 'package:analyzer/task/general.dart';
 import 'package:analyzer/task/model.dart';
+import 'package:plugin/manager.dart';
 import 'package:typed_mock/typed_mock.dart';
 import 'package:unittest/unittest.dart';
 
@@ -163,7 +164,8 @@ class C = B with M;
 @reflectiveTest
 class BuildCompilationUnitElementTaskTest extends _AbstractDartTaskTest {
   test_buildInputs() {
-    LibrarySpecificUnit target = new LibrarySpecificUnit(emptySource, emptySource);
+    LibrarySpecificUnit target =
+        new LibrarySpecificUnit(emptySource, emptySource);
     Map<String, TaskInput> inputs =
         BuildCompilationUnitElementTask.buildInputs(target);
     expect(inputs, isNotNull);
@@ -1111,7 +1113,20 @@ library lib_b;
     expect(outputs[IS_CLIENT], isFalse);
   }
 
-  test_perform_isClient_true_direct() {
+  test_perform_isClient_true_export_indirect() {
+    _newSource('/exports_html.dart', '''
+library lib_exports_html;
+export 'dart:html';
+''');
+    Source source = _newSource('/test.dart', '''
+import 'exports_html.dart';
+''');
+    _computeResult(source, IS_CLIENT);
+    expect(task, new isInstanceOf<BuildSourceClosuresTask>());
+    expect(outputs[IS_CLIENT], isTrue);
+  }
+
+  test_perform_isClient_true_import_direct() {
     Source sourceA = _newSource('/a.dart', '''
 library lib_a;
 import 'dart:html';
@@ -1121,7 +1136,7 @@ import 'dart:html';
     expect(outputs[IS_CLIENT], isTrue);
   }
 
-  test_perform_isClient_true_indirect() {
+  test_perform_isClient_true_import_indirect() {
     Source sourceA = _newSource('/a.dart', '''
 library lib_a;
 import 'b.dart';
@@ -1833,6 +1848,8 @@ class _AbstractDartTaskTest extends EngineTestCase {
   _MockContext context = new _MockContext();
   Map<AnalysisTarget, CacheEntry> entryMap = <AnalysisTarget, CacheEntry>{};
 
+  ExtensionManager extensionManager = new ExtensionManager();
+
   TaskManager taskManager = new TaskManager();
   AnalysisDriver analysisDriver;
 
@@ -1851,29 +1868,12 @@ class _AbstractDartTaskTest extends EngineTestCase {
       new DartUriResolver(sdk),
       new ResourceUriResolver(resourceProvider)
     ]);
-    // prepare TaskManager
-    taskManager.addTaskDescriptor(GetContentTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(ScanDartTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(ParseDartTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildClassConstructorsTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildCompilationUnitElementTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildLibraryConstructorsTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildLibraryElementTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildPublicNamespaceTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildDirectiveElementsTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildSourceClosuresTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildExportNamespaceTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildEnumMemberElementsTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildFunctionTypeAliasesTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(BuildTypeProviderTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(GatherUsedImportedElementsTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(GatherUsedLocalElementsTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(GenerateHintsTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(ResolveUnitTypeNamesTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(ResolveLibraryTypeNamesTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(ResolveReferencesTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(ResolveVariableReferencesTask.DESCRIPTOR);
-    taskManager.addTaskDescriptor(VerifyUnitTask.DESCRIPTOR);
+    // configure TaskManager
+    {
+      EnginePlugin plugin = new EnginePlugin();
+      extensionManager.processPlugins([plugin]);
+      taskManager.addTaskDescriptors(plugin.taskDescriptors);
+    }
     // prepare AnalysisDriver
     analysisDriver = new AnalysisDriver(taskManager, context);
   }
@@ -1910,7 +1910,7 @@ class _AbstractDartTaskTest extends EngineTestCase {
   }
 }
 
-class _MockContext extends TypedMock implements ExtendedAnalysisContext {
+class _MockContext extends TypedMock implements InternalAnalysisContext {
   AnalysisOptionsImpl analysisOptions = new AnalysisOptionsImpl();
   SourceFactory sourceFactory;
   TypeProvider typeProvider;
