@@ -10,7 +10,9 @@ library engine.element;
 import 'dart:collection';
 
 import 'package:analyzer/src/generated/utilities_general.dart';
-import 'package:analyzer/task/model.dart' show AnalysisTarget;
+import 'package:analyzer/src/task/dart.dart';
+import 'package:analyzer/task/model.dart'
+    show AnalysisTarget, ConstantEvaluationTarget;
 
 import 'ast.dart';
 import 'constant.dart' show EvaluationResultImpl;
@@ -176,6 +178,12 @@ abstract class ClassElement implements Element {
    * Return `true` if this class is defined by an enum declaration.
    */
   bool get isEnum;
+
+  /**
+   * Return `true` if this class is a mixin application.  A class is a mixin
+   * application if it was declared using the syntax "class A = B with C;".
+   */
+  bool get isMixinApplication;
 
   /**
    * Return `true` if this class [isProxy], or if it inherits the proxy
@@ -660,6 +668,9 @@ class ClassElementImpl extends ElementImpl implements ClassElement {
   bool get isEnum => hasModifier(Modifier.ENUM);
 
   @override
+  bool get isMixinApplication => hasModifier(Modifier.MIXIN_APPLICATION);
+
+  @override
   bool get isOrInheritsProxy =>
       _safeIsOrInheritsProxy(this, new HashSet<ClassElement>());
 
@@ -693,6 +704,13 @@ class ClassElementImpl extends ElementImpl implements ClassElement {
       (method as MethodElementImpl).enclosingElement = this;
     }
     this._methods = methods;
+  }
+
+  /**
+   * Set whether this class is a mixin application.
+   */
+  void set mixinApplication(bool isMixinApplication) {
+    setModifier(Modifier.MIXIN_APPLICATION, isMixinApplication);
   }
 
   bool get mixinErrorsReported => hasModifier(Modifier.MIXIN_ERRORS_REPORTED);
@@ -1260,6 +1278,15 @@ class CompilationUnitElementImpl extends UriReferencedElementImpl
   Source source;
 
   /**
+   * The source of the library containing this compilation unit.
+   *
+   * This is the same as the source of the containing [LibraryElement],
+   * except that it does not require the containing [LibraryElement] to be
+   * computed.
+   */
+  Source librarySource;
+
+  /**
    * A list containing all of the top-level accessors (getters and setters)
    * contained in this compilation unit.
    */
@@ -1526,7 +1553,14 @@ class CompilationUnitElementImpl extends UriReferencedElementImpl
 }
 
 /**
- * A [FieldElement] for a 'const' field that has an initializer.
+ * A [FieldElement] for a 'const' or 'final' field that has an initializer.
+ *
+ * TODO(paulberry): we should rename this class to reflect the fact that it's
+ * used for both const and final fields.  However, we shouldn't do so until
+ * we've created an API for reading the values of constants; until that API is
+ * available, clients are likely to read constant values by casting to
+ * ConstFieldElementImpl, so it would be a breaking change to rename this
+ * class.
  */
 class ConstFieldElementImpl extends FieldElementImpl with ConstVariableElement {
   /**
@@ -1535,15 +1569,28 @@ class ConstFieldElementImpl extends FieldElementImpl with ConstVariableElement {
   EvaluationResultImpl _result;
 
   /**
+   * Initialize a newly created synthetic field element to have the given
+   * [name] and [offset].
+   */
+  ConstFieldElementImpl(String name, int offset) : super(name, offset);
+
+  /**
    * Initialize a newly created field element to have the given [name].
    */
+  @deprecated // Use new ConstFieldElementImpl.forNode(name)
   ConstFieldElementImpl.con1(Identifier name) : super.forNode(name);
 
   /**
    * Initialize a newly created synthetic field element to have the given
    * [name] and [offset].
    */
+  @deprecated // Use new ConstFieldElementImpl(name, offset)
   ConstFieldElementImpl.con2(String name, int offset) : super(name, offset);
+
+  /**
+   * Initialize a newly created field element to have the given [name].
+   */
+  ConstFieldElementImpl.forNode(Identifier name) : super.forNode(name);
 
   @override
   EvaluationResultImpl get evaluationResult => _result;
@@ -1590,7 +1637,7 @@ class ConstLocalVariableElementImpl extends LocalVariableElementImpl
  * class.
  */
 abstract class ConstructorElement
-    implements ClassMemberElement, ExecutableElement {
+    implements ClassMemberElement, ExecutableElement, ConstantEvaluationTarget {
   /**
    * An empty list of constructor elements.
    */
@@ -2042,7 +2089,7 @@ abstract class DartType {
  * A [FieldFormalParameterElementImpl] for parameters that have an initializer.
  */
 class DefaultFieldFormalParameterElementImpl
-    extends FieldFormalParameterElementImpl {
+    extends FieldFormalParameterElementImpl with ConstVariableElement {
   /**
    * The result of evaluating this variable's initializer.
    */
@@ -2065,7 +2112,8 @@ class DefaultFieldFormalParameterElementImpl
 /**
  * A [ParameterElement] for parameters that have an initializer.
  */
-class DefaultParameterElementImpl extends ParameterElementImpl {
+class DefaultParameterElementImpl extends ParameterElementImpl
+    with ConstVariableElement {
   /**
    * The result of evaluating this variable's initializer.
    */
@@ -2817,7 +2865,7 @@ abstract class ElementImpl implements Element {
       return null;
     }
     int offset = nameOffset;
-    AstNode node = new NodeLocator.con1(offset).searchWithin(unit);
+    AstNode node = new NodeLocator(offset).searchWithin(unit);
     if (node == null) {
       return null;
     }
@@ -4546,13 +4594,28 @@ class FunctionTypeImpl extends TypeImpl implements FunctionType {
    * Initialize a newly created function type to be declared by the given
    * [element].
    */
+  FunctionTypeImpl(ExecutableElement element) : super(element, null);
+
+  /**
+   * Initialize a newly created function type to be declared by the given
+   * [element].
+   */
+  @deprecated // Use new FunctionTypeImpl(element)
   FunctionTypeImpl.con1(ExecutableElement element) : super(element, null);
 
   /**
    * Initialize a newly created function type to be declared by the given
    * [element].
    */
+  @deprecated // Use new FunctionTypeImpl.forTypedef(element)
   FunctionTypeImpl.con2(FunctionTypeAliasElement element)
+      : super(element, element == null ? null : element.name);
+
+  /**
+   * Initialize a newly created function type to be declared by the given
+   * [element].
+   */
+  FunctionTypeImpl.forTypedef(FunctionTypeAliasElement element)
       : super(element, element == null ? null : element.name);
 
   /**
@@ -5197,8 +5260,8 @@ class FunctionTypeImpl extends TypeImpl implements FunctionType {
     }
     Element element = this.element;
     FunctionTypeImpl newType = (element is ExecutableElement)
-        ? new FunctionTypeImpl.con1(element)
-        : new FunctionTypeImpl.con2(element as FunctionTypeAliasElement);
+        ? new FunctionTypeImpl(element)
+        : new FunctionTypeImpl.forTypedef(element as FunctionTypeAliasElement);
     newType.typeArguments =
         TypeImpl.substitute(typeArguments, argumentTypes, parameterTypes);
     return newType;
@@ -5706,6 +5769,11 @@ abstract class InterfaceType implements ParameterizedType {
    */
   List<PropertyAccessorElement> get accessors;
 
+  /**
+   * Return a list containing all of the constructors declared in this type.
+   */
+  List<ConstructorElement> get constructors;
+
   @override
   ClassElement get element;
 
@@ -6012,7 +6080,7 @@ abstract class InterfaceType implements ParameterizedType {
         lubArguments[i] = DynamicTypeImpl.instance;
       }
     }
-    InterfaceTypeImpl lub = new InterfaceTypeImpl.con1(firstElement);
+    InterfaceTypeImpl lub = new InterfaceTypeImpl(firstElement);
     lub.typeArguments = lubArguments;
     return lub;
   }
@@ -6030,6 +6098,12 @@ class InterfaceTypeImpl extends TypeImpl implements InterfaceType {
   /**
    * Initialize a newly created type to be declared by the given [element].
    */
+  InterfaceTypeImpl(ClassElement element) : super(element, element.displayName);
+
+  /**
+   * Initialize a newly created type to be declared by the given [element].
+   */
+  @deprecated // Use new InterfaceTypeImpl(element)
   InterfaceTypeImpl.con1(ClassElement element)
       : super(element, element.displayName);
 
@@ -6037,7 +6111,14 @@ class InterfaceTypeImpl extends TypeImpl implements InterfaceType {
    * Initialize a newly created type to have the given [name]. This constructor
    * should only be used in cases where there is no declaration of the type.
    */
+  @deprecated // Use new InterfaceTypeImpl.named(name)
   InterfaceTypeImpl.con2(String name) : super(null, name);
+
+  /**
+   * Initialize a newly created type to have the given [name]. This constructor
+   * should only be used in cases where there is no declaration of the type.
+   */
+  InterfaceTypeImpl.named(String name) : super(null, name);
 
   @override
   List<PropertyAccessorElement> get accessors {
@@ -6046,6 +6127,17 @@ class InterfaceTypeImpl extends TypeImpl implements InterfaceType {
         new List<PropertyAccessorElement>(accessors.length);
     for (int i = 0; i < accessors.length; i++) {
       members[i] = PropertyAccessorMember.from(accessors[i], this);
+    }
+    return members;
+  }
+
+  @override
+  List<ConstructorElement> get constructors {
+    List<ConstructorElement> constructors = element.constructors;
+    List<ConstructorElement> members =
+        new List<ConstructorElement>(constructors.length);
+    for (int i = 0; i < constructors.length; i++) {
+      members[i] = ConstructorMember.from(constructors[i], this);
     }
     return members;
   }
@@ -6587,7 +6679,7 @@ class InterfaceTypeImpl extends TypeImpl implements InterfaceType {
     if (JavaArrays.equals(newTypeArguments, typeArguments)) {
       return this;
     }
-    InterfaceTypeImpl newType = new InterfaceTypeImpl.con1(element);
+    InterfaceTypeImpl newType = new InterfaceTypeImpl(element);
     newType.typeArguments = newTypeArguments;
     return newType;
   }
@@ -6995,6 +7087,7 @@ class LibraryElementImpl extends ElementImpl implements LibraryElement {
    * [unit].
    */
   void set definingCompilationUnit(CompilationUnitElement unit) {
+    assert((unit as CompilationUnitElementImpl).librarySource == unit.source);
     (unit as CompilationUnitElementImpl).enclosingElement = this;
     this._definingCompilationUnit = unit;
   }
@@ -7137,7 +7230,7 @@ class LibraryElementImpl extends ElementImpl implements LibraryElement {
       function.synthetic = true;
       function.enclosingElement = this;
       function.returnType = loadLibraryReturnType;
-      function.type = new FunctionTypeImpl.con1(function);
+      function.type = new FunctionTypeImpl(function);
       _loadLibraryFunction = function;
     }
     return _loadLibraryFunction;
@@ -7186,6 +7279,8 @@ class LibraryElementImpl extends ElementImpl implements LibraryElement {
    */
   void set parts(List<CompilationUnitElement> parts) {
     for (CompilationUnitElement compilationUnit in parts) {
+      assert((compilationUnit as CompilationUnitElementImpl).librarySource ==
+          source);
       (compilationUnit as CompilationUnitElementImpl).enclosingElement = this;
     }
     this._parts = parts;
@@ -7915,41 +8010,47 @@ class Modifier extends Enum<Modifier> {
   static const Modifier MIXIN = const Modifier('MIXIN', 10);
 
   /**
+   * Indicates that a class is a mixin application.
+   */
+  static const Modifier MIXIN_APPLICATION =
+      const Modifier('MIXIN_APPLICATION', 11);
+
+  /**
    * Indicates that an error has reported explaining why this class is an
    * invalid mixin application.
    */
   static const Modifier MIXIN_ERRORS_REPORTED =
-      const Modifier('MIXIN_ERRORS_REPORTED', 11);
+      const Modifier('MIXIN_ERRORS_REPORTED', 12);
 
   /**
    * Indicates that the value of a parameter or local variable might be mutated
    * within the context.
    */
   static const Modifier POTENTIALLY_MUTATED_IN_CONTEXT =
-      const Modifier('POTENTIALLY_MUTATED_IN_CONTEXT', 12);
+      const Modifier('POTENTIALLY_MUTATED_IN_CONTEXT', 13);
 
   /**
    * Indicates that the value of a parameter or local variable might be mutated
    * within the scope.
    */
   static const Modifier POTENTIALLY_MUTATED_IN_SCOPE =
-      const Modifier('POTENTIALLY_MUTATED_IN_SCOPE', 13);
+      const Modifier('POTENTIALLY_MUTATED_IN_SCOPE', 14);
 
   /**
    * Indicates that a class contains an explicit reference to 'super'.
    */
   static const Modifier REFERENCES_SUPER =
-      const Modifier('REFERENCES_SUPER', 14);
+      const Modifier('REFERENCES_SUPER', 15);
 
   /**
    * Indicates that the pseudo-modifier 'set' was applied to the element.
    */
-  static const Modifier SETTER = const Modifier('SETTER', 15);
+  static const Modifier SETTER = const Modifier('SETTER', 16);
 
   /**
    * Indicates that the modifier 'static' was applied to the element.
    */
-  static const Modifier STATIC = const Modifier('STATIC', 16);
+  static const Modifier STATIC = const Modifier('STATIC', 17);
 
   /**
    * Indicates that the element does not appear in the source code but was
@@ -7957,13 +8058,13 @@ class Modifier extends Enum<Modifier> {
    * constructors, an implicit zero-argument constructor will be created and it
    * will be marked as being synthetic.
    */
-  static const Modifier SYNTHETIC = const Modifier('SYNTHETIC', 17);
+  static const Modifier SYNTHETIC = const Modifier('SYNTHETIC', 18);
 
   /**
    * Indicates that a class was defined using an alias.
    * TODO(brianwilkerson) This should be renamed to 'ALIAS'.
    */
-  static const Modifier TYPEDEF = const Modifier('TYPEDEF', 18);
+  static const Modifier TYPEDEF = const Modifier('TYPEDEF', 19);
 
   static const List<Modifier> values = const [
     ABSTRACT,
@@ -7977,6 +8078,7 @@ class Modifier extends Enum<Modifier> {
     GETTER,
     HAS_EXT_URI,
     MIXIN,
+    MIXIN_APPLICATION,
     MIXIN_ERRORS_REPORTED,
     POTENTIALLY_MUTATED_IN_CONTEXT,
     POTENTIALLY_MUTATED_IN_SCOPE,
@@ -8277,7 +8379,8 @@ abstract class NamespaceCombinator {
 /**
  * A parameter defined within an executable element.
  */
-abstract class ParameterElement implements LocalElement, VariableElement {
+abstract class ParameterElement
+    implements LocalElement, VariableElement, ConstantEvaluationTarget {
   /**
    * An empty list of parameter elements.
    */
@@ -8313,7 +8416,7 @@ abstract class ParameterElement implements LocalElement, VariableElement {
  * A concrete implementation of a [ParameterElement].
  */
 class ParameterElementImpl extends VariableElementImpl
-    implements ParameterElement {
+    with PotentiallyConstVariableElement implements ParameterElement {
   /**
    * An empty list of parameter elements.
    */
@@ -8648,7 +8751,8 @@ class ParameterMember extends VariableMember implements ParameterElement {
  *
  * This class is not intended to be part of the public API for analyzer.
  */
-abstract class PotentiallyConstVariableElement {
+abstract class PotentiallyConstVariableElement
+    implements VariableElementImpl, ConstantEvaluationTarget {
   /**
    * If this element represents a constant variable, and it has an initializer,
    * a copy of the initializer for the constant.  Otherwise `null`.
@@ -10048,7 +10152,7 @@ abstract class UriReferencedElementImpl extends ElementImpl
 /**
  * A variable. There are concrete subclasses for different kinds of variables.
  */
-abstract class VariableElement implements Element {
+abstract class VariableElement implements Element, ConstantEvaluationTarget {
   /**
    * An empty list of variable elements.
    */
