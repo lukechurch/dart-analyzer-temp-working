@@ -9,6 +9,7 @@ import 'dart:collection';
 import 'package:analyzer/src/generated/engine.dart' hide AnalysisTask;
 import 'package:analyzer/src/generated/java_engine.dart';
 import 'package:analyzer/src/generated/source.dart';
+import 'package:analyzer/src/task/driver.dart';
 import 'package:analyzer/src/task/model.dart';
 
 /**
@@ -116,6 +117,14 @@ abstract class AnalysisTask {
   CaughtException caughtException;
 
   /**
+   * If a dependency cycle was found while computing the inputs for the task,
+   * the set of [WorkItem]s contained in the cycle (if there are overlapping
+   * cycles, this is the set of all [WorkItem]s in the entire strongly
+   * connected component).  Otherwise, `null`.
+   */
+  List<WorkItem> dependencyCycle;
+
+  /**
    * Initialize a newly created task to perform analysis within the given
    * [context] in order to produce results for the given [target].
    */
@@ -130,6 +139,14 @@ abstract class AnalysisTask {
    * Return the descriptor that describes this task.
    */
   TaskDescriptor get descriptor;
+
+  /**
+   * Indicates whether the task is capable of handling dependency cycles.  A
+   * task that overrides this getter to return `true` must be prepared for the
+   * possibility that it will be invoked with a non-`null` value of
+   * [dependencyCycle], and with not all of its inputs computed.
+   */
+  bool get handlesDependencyCycles => false;
 
   /**
    * Return the value of the input with the given [name]. Throw an exception if
@@ -203,7 +220,7 @@ abstract class AnalysisTask {
         contextName = 'unnamed';
       }
       AnalysisEngine.instance.instrumentationService.logAnalysisTask(
-          contextName, description);
+          contextName, this);
       //
       // Gather statistics on the performance of the task.
       //
@@ -219,6 +236,9 @@ abstract class AnalysisTask {
       // Actually perform the task.
       //
       try {
+        if (dependencyCycle != null && !handlesDependencyCycles) {
+          throw new InfiniteTaskLoopException(this, dependencyCycle);
+        }
         internalPerform();
       } finally {
         stopwatch.stop();
@@ -234,28 +254,6 @@ abstract class AnalysisTask {
 }
 
 /**
- * A [ResultDescriptor] that denotes an analysis result that is a union of
- * one or more other results.
- *
- * Clients are not expected to subtype this class.
- */
-abstract class CompositeResultDescriptor<V> extends ResultDescriptor<V> {
-  /**
-   * Initialize a newly created composite result to have the given [name].
-   */
-  factory CompositeResultDescriptor(
-      String name) = CompositeResultDescriptorImpl;
-
-  /**
-   * Return a list containing the descriptors of the results that are unioned
-   * together to compose the value of this result.
-   *
-   * Clients must not modify the returned list.
-   */
-  List<ResultDescriptor<V>> get contributors;
-}
-
-/**
  * A description of a [List]-based analysis result that can be computed by an
  * [AnalysisTask].
  *
@@ -263,11 +261,12 @@ abstract class CompositeResultDescriptor<V> extends ResultDescriptor<V> {
  */
 abstract class ListResultDescriptor<E> implements ResultDescriptor<List<E>> {
   /**
-   * Initialize a newly created analysis result to have the given [name]. If a
-   * composite result is specified, then this result will contribute to it.
+   * Initialize a newly created analysis result to have the given [name] and
+   * [defaultValue]. If a [cachingPolicy] is provided, it will control how long
+   * values associated with this result will remain in the cache.
    */
   factory ListResultDescriptor(String name, List<E> defaultValue,
-      {CompositeResultDescriptor<List<E>> contributesTo}) = ListResultDescriptorImpl<E>;
+      {ResultCachingPolicy<List<E>> cachingPolicy}) = ListResultDescriptorImpl<E>;
 
   @override
   ListTaskInput<E> of(AnalysisTarget target);
@@ -326,17 +325,52 @@ abstract class MapTaskInput<K, V> extends TaskInput<Map<K, V>> {
 }
 
 /**
+ * A policy object that can compute sizes of results and provide the maximum
+ * active and idle sizes that can be kept in the cache.
+ *
+ * All the [ResultDescriptor]s with the same [ResultCachingPolicy] instance
+ * share the same total size in a cache.
+ */
+abstract class ResultCachingPolicy<T> {
+  /**
+   * Return the maximum total size of results that can be kept in the cache
+   * while analysis is in progress.
+   */
+  int get maxActiveSize;
+
+  /**
+   * Return the maximum total size of results that can be kept in the cache
+   * while analysis is idle.
+   */
+  int get maxIdleSize;
+
+  /**
+   * Return the size of the given [object].
+   */
+  int measure(T object);
+}
+
+/**
  * A description of an analysis result that can be computed by an [AnalysisTask].
  *
  * Clients are not expected to subtype this class.
  */
 abstract class ResultDescriptor<V> {
   /**
-   * Initialize a newly created analysis result to have the given [name]. If a
-   * composite result is specified, then this result will contribute to it.
+   * Initialize a newly created analysis result to have the given [name] and
+   * [defaultValue].
+   *
+   * The given [cachingPolicy] is used to limit the total size of results
+   * described by this descriptor. If no policy is specified, the results are
+   * never evicted from the cache, and removed only when they are invalidated.
    */
   factory ResultDescriptor(String name, V defaultValue,
-      {CompositeResultDescriptor<V> contributesTo}) = ResultDescriptorImpl;
+      {ResultCachingPolicy<V> cachingPolicy}) = ResultDescriptorImpl;
+
+  /**
+   * Return the caching policy for results described by this descriptor.
+   */
+  ResultCachingPolicy<V> get cachingPolicy;
 
   /**
    * Return the default value for results described by this descriptor.
@@ -403,6 +437,12 @@ abstract class TaskInput<V> {
    * Create and return a builder that can be used to build this task input.
    */
   TaskInputBuilder<V> createBuilder();
+
+  /**
+   * Return a task input that can be used to compute a list whose elements are
+   * the result of passing the result of this input to the [mapper] function.
+   */
+  ListTaskInput /*<E>*/ mappedToList(List /*<E>*/ mapper(V value));
 }
 
 /**
@@ -447,8 +487,19 @@ abstract class TaskInputBuilder<V> {
    *
    * Throws a [StateError] if [moveNext] has not been invoked or if the last
    * invocation of [moveNext] returned `true`.
+   *
+   * Returns `null` if no value could be computed due to a circular dependency.
    */
   V get inputValue;
+
+  /**
+   * Record that no value is available for the current result, due to a
+   * circular dependency.
+   *
+   * Throws a [StateError] if [moveNext] has not been invoked or if the last
+   * invocation of [moveNext] returned `false`.
+   */
+  void currentValueNotAvailable();
 
   /**
    * Move to the next result that needs to be computed in order to build the

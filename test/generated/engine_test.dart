@@ -35,6 +35,8 @@ import 'package:analyzer/src/services/lint.dart';
 import 'package:analyzer/src/string_source.dart';
 import 'package:analyzer/src/task/task_dart.dart';
 import 'package:analyzer/task/model.dart' hide AnalysisTask;
+import 'package:html/dom.dart' show Document;
+import 'package:path/path.dart' as pathos;
 import 'package:typed_mock/typed_mock.dart';
 import 'package:unittest/unittest.dart';
 import 'package:watcher/src/utils.dart';
@@ -46,30 +48,34 @@ import 'test_support.dart';
 
 main() {
   groupSep = ' | ';
-  runReflectiveTests(AnalysisCacheTest);
-  runReflectiveTests(AnalysisContextImplTest);
-  runReflectiveTests(AnalysisTaskTest);
-  runReflectiveTests(AnalysisOptionsImplTest);
-  runReflectiveTests(DartEntryTest);
-  runReflectiveTests(GenerateDartErrorsTaskTest);
-  runReflectiveTests(GenerateDartHintsTaskTest);
-  runReflectiveTests(GenerateDartLintsTaskTest);
-  runReflectiveTests(GetContentTaskTest);
-  runReflectiveTests(HtmlEntryTest);
-  runReflectiveTests(IncrementalAnalysisCacheTest);
-  runReflectiveTests(IncrementalAnalysisTaskTest);
-  runReflectiveTests(LintGeneratorTest);
-  runReflectiveTests(ParseDartTaskTest);
-  runReflectiveTests(ParseHtmlTaskTest);
-  runReflectiveTests(PartitionManagerTest);
-  runReflectiveTests(ResolveDartLibraryTaskTest);
-  runReflectiveTests(ResolveDartUnitTaskTest);
-  runReflectiveTests(ResolveHtmlTaskTest);
-  runReflectiveTests(ScanDartTaskTest);
-  runReflectiveTests(SdkCachePartitionTest);
+  // Tests for the classes used in both old and new analysis implementations.
   runReflectiveTests(SourcesChangedEventTest);
-  runReflectiveTests(UniversalCachePartitionTest);
-  runReflectiveTests(WorkManagerTest);
+  // Tests for the classes used in the old analysis implementation.
+  if (!AnalysisEngine.instance.useTaskModel) {
+    runReflectiveTests(AnalysisCacheTest);
+    runReflectiveTests(AnalysisContextImplTest);
+    runReflectiveTests(AnalysisTaskTest);
+    runReflectiveTests(AnalysisOptionsImplTest);
+    runReflectiveTests(DartEntryTest);
+    runReflectiveTests(GenerateDartErrorsTaskTest);
+    runReflectiveTests(GenerateDartHintsTaskTest);
+    runReflectiveTests(GenerateDartLintsTaskTest);
+    runReflectiveTests(GetContentTaskTest);
+    runReflectiveTests(HtmlEntryTest);
+    runReflectiveTests(IncrementalAnalysisCacheTest);
+    runReflectiveTests(IncrementalAnalysisTaskTest);
+    runReflectiveTests(LintGeneratorTest);
+    runReflectiveTests(ParseDartTaskTest);
+    runReflectiveTests(ParseHtmlTaskTest);
+    runReflectiveTests(PartitionManagerTest);
+    runReflectiveTests(ResolveDartLibraryTaskTest);
+    runReflectiveTests(ResolveDartUnitTaskTest);
+    runReflectiveTests(ResolveHtmlTaskTest);
+    runReflectiveTests(ScanDartTaskTest);
+    runReflectiveTests(SdkCachePartitionTest);
+    runReflectiveTests(UniversalCachePartitionTest);
+    runReflectiveTests(WorkManagerTest);
+  }
 }
 
 @reflectiveTest
@@ -107,11 +113,11 @@ class AnalysisCacheTest extends EngineTestCase {
         new UniversalCachePartition(null, 8, new DefaultRetentionPolicy());
     AnalysisCache cache = new AnalysisCache(<CachePartition>[partition]);
     JavaFile file = new JavaFile('baz.dart');
-    Source source1 = new FileBasedSource.con1(file);
+    Source source1 = new FileBasedSource(file);
     Source source2 =
-        new FileBasedSource.con2(Uri.parse('package:foo/baz.dart'), file);
+        new FileBasedSource(file, Uri.parse('package:foo/baz.dart'));
     Source source3 =
-        new FileBasedSource.con2(Uri.parse('package:bar/baz.dart'), file);
+        new FileBasedSource(file, Uri.parse('package:bar/baz.dart'));
     DartEntry entry1 = new DartEntry();
     DartEntry entry2 = new DartEntry();
     DartEntry entry3 = new DartEntry();
@@ -235,7 +241,7 @@ class AnalysisContextImplTest extends EngineTestCase {
     ]);
     _context.sourceFactory = _sourceFactory;
     AnalysisOptionsImpl options =
-        new AnalysisOptionsImpl.con1(_context.analysisOptions);
+        new AnalysisOptionsImpl.from(_context.analysisOptions);
     options.cacheSize = 256;
     _context.analysisOptions = options;
   }
@@ -252,7 +258,7 @@ class AnalysisContextImplTest extends EngineTestCase {
     _context.onSourcesChanged.listen(listener.onData);
     expect(_context.sourcesNeedingProcessing.isEmpty, isTrue);
     Source source =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     ChangeSet changeSet = new ChangeSet();
     changeSet.addedSource(source);
     _context.applyChanges(changeSet);
@@ -268,13 +274,13 @@ class AnalysisContextImplTest extends EngineTestCase {
     _context.onSourcesChanged.listen(listener.onData);
     expect(_context.sourcesNeedingProcessing.isEmpty, isTrue);
     Source source =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     ChangeSet changeSet1 = new ChangeSet();
     changeSet1.addedSource(source);
     _context.applyChanges(changeSet1);
     expect(_context.sourcesNeedingProcessing.contains(source), isTrue);
     Source source2 =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test2.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test2.dart"));
     ChangeSet changeSet2 = new ChangeSet();
     changeSet2.addedSource(source2);
     changeSet2.changedSource(source);
@@ -291,13 +297,13 @@ class AnalysisContextImplTest extends EngineTestCase {
     _context.onSourcesChanged.listen(listener.onData);
     expect(_context.sourcesNeedingProcessing.isEmpty, isTrue);
     Source source =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     ChangeSet changeSet1 = new ChangeSet();
     changeSet1.addedSource(source);
     _context.applyChanges(changeSet1);
     expect(_context.sourcesNeedingProcessing.contains(source), isTrue);
     Source source2 =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test2.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test2.dart"));
     ChangeSet changeSet2 = new ChangeSet();
     changeSet2.addedSource(source2);
     changeSet2.changedContent(source, 'library test;');
@@ -310,7 +316,7 @@ class AnalysisContextImplTest extends EngineTestCase {
   }
 
   void test_applyChanges_change_flush_element() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source librarySource = _addSource("/lib.dart", r'''
 library lib;
@@ -323,7 +329,7 @@ int aa = 0;''');
   }
 
   Future test_applyChanges_change_multiple() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     SourcesChangedListener listener = new SourcesChangedListener();
     _context.onSourcesChanged.listen(listener.onData);
     _sourceFactory = _context.sourceFactory;
@@ -376,13 +382,13 @@ int b = aa;''';
     _context.onSourcesChanged.listen(listener.onData);
     expect(_context.sourcesNeedingProcessing.isEmpty, isTrue);
     Source source =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     ChangeSet changeSet1 = new ChangeSet();
     changeSet1.addedSource(source);
     _context.applyChanges(changeSet1);
     expect(_context.sourcesNeedingProcessing.contains(source), isTrue);
     Source source2 =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test2.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test2.dart"));
     ChangeSet changeSet2 = new ChangeSet();
     changeSet2.addedSource(source2);
     changeSet2.changedRange(source, 'library test;', 0, 0, 13);
@@ -415,7 +421,7 @@ int b = aa;''';
   }
 
   Future test_applyChanges_remove() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     SourcesChangedListener listener = new SourcesChangedListener();
     _context.onSourcesChanged.listen(listener.onData);
     _sourceFactory = _context.sourceFactory;
@@ -451,7 +457,7 @@ import 'libB.dart';''';
   }
 
   Future test_applyChanges_removeContainer() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     SourcesChangedListener listener = new SourcesChangedListener();
     _context.onSourcesChanged.listen(listener.onData);
     _sourceFactory = _context.sourceFactory;
@@ -484,7 +490,7 @@ import 'libB.dart';''';
   }
 
   void test_computeDocumentationComment_block() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     String comment = "/** Comment */";
     Source source = _addSource("/test.dart", """
@@ -498,7 +504,7 @@ class A {}""");
   }
 
   void test_computeDocumentationComment_none() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/test.dart", "class A {}");
     LibraryElement libraryElement = _context.computeLibraryElement(source);
@@ -513,7 +519,7 @@ class A {}""");
   }
 
   void test_computeDocumentationComment_singleLine_multiple_EOL_n() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     String comment = "/// line 1\n/// line 2\n/// line 3\n";
     Source source = _addSource("/test.dart", "${comment}class A {}");
@@ -526,7 +532,7 @@ class A {}""");
   }
 
   void test_computeDocumentationComment_singleLine_multiple_EOL_rn() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     String comment = "/// line 1\r\n/// line 2\r\n/// line 3\r\n";
     Source source = _addSource("/test.dart", "${comment}class A {}");
@@ -626,7 +632,7 @@ class A {}""");
   }
 
   void test_computeLibraryElement() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/test.dart", "library lib;");
     LibraryElement element = _context.computeLibraryElement(source);
@@ -684,7 +690,7 @@ main() {}''');
   }
 
   Future test_computeResolvedCompilationUnitAsync() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/lib.dart", "library lib;");
     // Complete all pending analysis tasks and flush the AST so that it won't
@@ -708,7 +714,7 @@ main() {}''');
   }
 
   Future test_computeResolvedCompilationUnitAsync_afterDispose() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/lib.dart", "library lib;");
     // Complete all pending analysis tasks and flush the AST so that it won't
@@ -735,7 +741,7 @@ main() {}''');
   }
 
   Future test_computeResolvedCompilationUnitAsync_cancel() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/lib.dart", "library lib;");
     // Complete all pending analysis tasks and flush the AST so that it won't
@@ -763,7 +769,7 @@ main() {}''');
   }
 
   Future test_computeResolvedCompilationUnitAsync_dispose() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/lib.dart", "library lib;");
     // Complete all pending analysis tasks and flush the AST so that it won't
@@ -793,7 +799,7 @@ main() {}''');
   }
 
   Future test_computeResolvedCompilationUnitAsync_unrelatedLibrary() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source librarySource = _addSource("/lib.dart", "library lib;");
     Source partSource = _addSource("/part.dart", "part of foo;");
@@ -870,12 +876,12 @@ main() {}''');
   }
 
   void test_getDeclaredVariables() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     expect(_context.declaredVariables, isNotNull);
   }
 
   void test_getElement() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     LibraryElement core =
         _context.computeLibraryElement(_sourceFactory.forUri("dart:core"));
@@ -982,7 +988,7 @@ class A {
   }
 
   void test_getHtmlFilesReferencing_html() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source htmlSource = _addSource("/test.html", r'''
 <html><head>
@@ -1015,7 +1021,7 @@ class A {
   }
 
   void test_getHtmlFilesReferencing_part() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source htmlSource = _addSource("/test.html", r'''
 <html><head>
@@ -1069,7 +1075,7 @@ class A {
   }
 
   void test_getLaunchableClientLibrarySources() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     List<Source> sources = _context.launchableClientLibrarySources;
     expect(sources, hasLength(0));
@@ -1082,7 +1088,7 @@ main() {}''');
   }
 
   void test_getLaunchableServerLibrarySources() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     List<Source> sources = _context.launchableServerLibrarySources;
     expect(sources, hasLength(0));
@@ -1093,7 +1099,7 @@ main() {}''');
   }
 
   void test_getLibrariesContaining() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source librarySource = _addSource("/lib.dart", r'''
 library lib;
@@ -1109,7 +1115,7 @@ part 'part.dart';''');
   }
 
   void test_getLibrariesDependingOn() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source libASource = _addSource("/libA.dart", "library libA;");
     _addSource("/libB.dart", "library libB;");
@@ -1128,7 +1134,7 @@ export 'libA.dart';''');
   }
 
   void test_getLibrariesReferencedFromHtml() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source htmlSource = _addSource("/test.html", r'''
 <html><head>
@@ -1144,7 +1150,7 @@ export 'libA.dart';''');
   }
 
   void test_getLibrariesReferencedFromHtml_no() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source htmlSource = _addSource("/test.html", r'''
 <html><head>
@@ -1157,7 +1163,7 @@ export 'libA.dart';''');
   }
 
   void test_getLibraryElement() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/test.dart", "library lib;");
     LibraryElement element = _context.getLibraryElement(source);
@@ -1211,7 +1217,7 @@ main() {}''');
   }
 
   void test_getPublicNamespace_element() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/test.dart", "class A {}");
     LibraryElement library = _context.computeLibraryElement(source);
@@ -1222,7 +1228,7 @@ main() {}''');
   }
 
   void test_getResolvedCompilationUnit_library() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/lib.dart", "library libb;");
     LibraryElement library = _context.computeLibraryElement(source);
@@ -1232,14 +1238,14 @@ main() {}''');
   }
 
   void test_getResolvedCompilationUnit_library_null() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/lib.dart", "library lib;");
     expect(_context.getResolvedCompilationUnit(source, null), isNull);
   }
 
   void test_getResolvedCompilationUnit_source_dart() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/lib.dart", "library lib;");
     expect(_context.getResolvedCompilationUnit2(source, source), isNull);
@@ -1248,7 +1254,7 @@ main() {}''');
   }
 
   void test_getResolvedCompilationUnit_source_html() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/test.html", "<html></html>");
     expect(_context.getResolvedCompilationUnit2(source, source), isNull);
@@ -1257,7 +1263,7 @@ main() {}''');
   }
 
   void test_getResolvedHtmlUnit() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/test.html", "<html></html>");
     expect(_context.getResolvedHtmlUnit(source), isNull);
@@ -1300,7 +1306,7 @@ main() {}''');
   }
 
   void test_isClientLibrary_dart() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/test.dart", r'''
 import 'dart:html';
@@ -1319,7 +1325,7 @@ main() {}''');
   }
 
   void test_isServerLibrary_dart() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/test.dart", r'''
 library lib;
@@ -1370,7 +1376,7 @@ main() {}''');
 
   void test_parseCompilationUnit_nonExistentSource() {
     Source source =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     try {
       _context.parseCompilationUnit(source);
       fail("Expected AnalysisException because file does not exist");
@@ -1750,7 +1756,7 @@ void g() { f(null); }''');
   }
 
   void test_resolveCompilationUnit_import_relative() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     Source sourceA =
         _addSource("/libA.dart", "library libA; import 'libB.dart'; class A{}");
     _addSource("/libB.dart", "library libB; class B{}");
@@ -1764,7 +1770,7 @@ void g() { f(null); }''');
   }
 
   void test_resolveCompilationUnit_import_relative_cyclic() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     Source sourceA =
         _addSource("/libA.dart", "library libA; import 'libB.dart'; class A{}");
     _addSource("/libB.dart", "library libB; import 'libA.dart'; class B{}");
@@ -1778,7 +1784,7 @@ void g() { f(null); }''');
   }
 
   void test_resolveCompilationUnit_library() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/lib.dart", "library lib;");
     LibraryElement library = _context.computeLibraryElement(source);
@@ -1789,7 +1795,7 @@ void g() { f(null); }''');
   }
 
   void test_resolveCompilationUnit_source() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source source = _addSource("/lib.dart", "library lib;");
     CompilationUnit compilationUnit =
@@ -1828,7 +1834,7 @@ void g() { f(null); }''');
 
   void test_setAnalysisOptions_reduceAnalysisPriorityOrder() {
     AnalysisOptionsImpl options =
-        new AnalysisOptionsImpl.con1(_context.analysisOptions);
+        new AnalysisOptionsImpl.from(_context.analysisOptions);
     List<Source> sources = new List<Source>();
     for (int index = 0; index < options.cacheSize; index++) {
       sources.add(_addSource("/lib.dart$index", ""));
@@ -1863,7 +1869,7 @@ void g() { f(null); }''');
   Future test_setChangedContents_libraryWithPart() {
     AnalysisOptionsImpl options = new AnalysisOptionsImpl();
     options.incremental = true;
-    _context = AnalysisContextFactory.contextWithCoreAndOptions(options);
+    _context = AnalysisContextFactory.oldContextWithCoreAndOptions(options);
     SourcesChangedListener listener = new SourcesChangedListener();
     _context.onSourcesChanged.listen(listener.onData);
     _sourceFactory = _context.sourceFactory;
@@ -1906,9 +1912,9 @@ int ya = 0;''';
   }
 
   void test_setChangedContents_notResolved() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     AnalysisOptionsImpl options =
-        new AnalysisOptionsImpl.con1(_context.analysisOptions);
+        new AnalysisOptionsImpl.from(_context.analysisOptions);
     options.incremental = true;
     _context.analysisOptions = options;
     _sourceFactory = _context.sourceFactory;
@@ -1926,7 +1932,7 @@ int ya = 0;''';
   }
 
   Future test_setContents_libraryWithPart() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     SourcesChangedListener listener = new SourcesChangedListener();
     _context.onSourcesChanged.listen(listener.onData);
     _sourceFactory = _context.sourceFactory;
@@ -1963,7 +1969,7 @@ int aa = 0;''';
   }
 
   void test_setContents_null() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source librarySource = _addSource("/lib.dart", r'''
 library lib;
@@ -2004,7 +2010,7 @@ int a = 0;''');
   }
 
   void test_unreadableSource() {
-    _context = AnalysisContextFactory.contextWithCore();
+    _context = AnalysisContextFactory.oldContextWithCore();
     _sourceFactory = _context.sourceFactory;
     Source test1 = _addSource("/test1.dart", r'''
 import 'test2.dart';
@@ -2025,7 +2031,7 @@ library test2;''');
   void test_updateAnalysis() {
     expect(_context.sourcesNeedingProcessing.isEmpty, isTrue);
     Source source =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     AnalysisDelta delta = new AnalysisDelta();
     delta.setAnalysisLevel(source, AnalysisLevel.ALL);
     _context.applyAnalysisDelta(delta);
@@ -2039,7 +2045,7 @@ library test2;''');
   void xtest_performAnalysisTask_stress() {
     int maxCacheSize = 4;
     AnalysisOptionsImpl options =
-        new AnalysisOptionsImpl.con1(_context.analysisOptions);
+        new AnalysisOptionsImpl.from(_context.analysisOptions);
     options.cacheSize = maxCacheSize;
     _context.analysisOptions = options;
     int sourceCount = maxCacheSize + 2;
@@ -2067,8 +2073,7 @@ library test2;''');
   }
 
   Source _addSource(String fileName, String contents) {
-    Source source =
-        new FileBasedSource.con1(FileUtilities2.createFile(fileName));
+    Source source = new FileBasedSource(FileUtilities2.createFile(fileName));
     ChangeSet changeSet = new ChangeSet();
     changeSet.addedSource(source);
     _context.applyChanges(changeSet);
@@ -2215,7 +2220,7 @@ class AnalysisOptionsImplTest extends EngineTestCase {
       options.hint = booleanValue;
       options.incremental = booleanValue;
       options.preserveComments = booleanValue;
-      AnalysisOptionsImpl copy = new AnalysisOptionsImpl.con1(options);
+      AnalysisOptionsImpl copy = new AnalysisOptionsImpl.from(options);
       expect(copy.analyzeFunctionBodies, options.analyzeFunctionBodies);
       expect(copy.cacheSize, options.cacheSize);
       expect(copy.dart2jsHint, options.dart2jsHint);
@@ -2306,8 +2311,7 @@ class AnalysisTask_test_perform_exception extends AnalysisTask {
 @reflectiveTest
 class AnalysisTaskTest extends EngineTestCase {
   void test_perform_exception() {
-    InternalAnalysisContext context = new AnalysisContextImpl();
-    context.sourceFactory = new SourceFactory([new FileUriResolver()]);
+    InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     AnalysisTask task = new AnalysisTask_test_perform_exception(context);
     task.perform(new TestTaskVisitor<Object>());
   }
@@ -2324,28 +2328,28 @@ class DartEntryTest extends EngineTestCase {
     DartEntry entry = new DartEntry();
     expect(entry.allErrors, hasLength(0));
     entry.setValue(SourceEntry.CONTENT_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(
-          source, ScannerErrorCode.UNABLE_GET_CONTENT, ['exception details'])
+      new AnalysisError(source, 0, 0, ScannerErrorCode.UNABLE_GET_CONTENT,
+          ['exception details'])
     ]);
     entry.setValue(DartEntry.SCAN_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(
-          source, ScannerErrorCode.UNTERMINATED_STRING_LITERAL)
+      new AnalysisError(
+          source, 0, 0, ScannerErrorCode.UNTERMINATED_STRING_LITERAL)
     ]);
     entry.setValue(DartEntry.PARSE_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(source, ParserErrorCode.ABSTRACT_CLASS_MEMBER)
+      new AnalysisError(source, 0, 0, ParserErrorCode.ABSTRACT_CLASS_MEMBER)
     ]);
     entry.setValueInLibrary(DartEntry.RESOLUTION_ERRORS, source,
         <AnalysisError>[
-      new AnalysisError.con1(
-          source, CompileTimeErrorCode.CONST_CONSTRUCTOR_THROWS_EXCEPTION)
+      new AnalysisError(
+          source, 0, 0, CompileTimeErrorCode.CONST_CONSTRUCTOR_THROWS_EXCEPTION)
     ]);
     entry.setValueInLibrary(DartEntry.VERIFICATION_ERRORS, source,
         <AnalysisError>[
-      new AnalysisError.con1(
-          source, StaticWarningCode.CASE_BLOCK_NOT_TERMINATED)
+      new AnalysisError(
+          source, 0, 0, StaticWarningCode.CASE_BLOCK_NOT_TERMINATED)
     ]);
     entry.setValueInLibrary(DartEntry.HINTS, source,
-        <AnalysisError>[new AnalysisError.con1(source, HintCode.DEAD_CODE)]);
+        <AnalysisError>[new AnalysisError(source, 0, 0, HintCode.DEAD_CODE)]);
     expect(entry.allErrors, hasLength(6));
   }
 
@@ -3386,7 +3390,7 @@ class DartEntryTest extends EngineTestCase {
 
   void test_setValue_hints() {
     _setValueInLibrary(DartEntry.HINTS,
-        <AnalysisError>[new AnalysisError.con1(null, HintCode.DEAD_CODE)]);
+        <AnalysisError>[new AnalysisError(null, 0, 0, HintCode.DEAD_CODE)]);
   }
 
   void test_setValue_importedLibraries() {
@@ -3415,7 +3419,7 @@ class DartEntryTest extends EngineTestCase {
 
   void test_setValue_parseErrors() {
     _setValue(DartEntry.PARSE_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(null, ParserErrorCode.ABSTRACT_CLASS_MEMBER)
+      new AnalysisError(null, 0, 0, ParserErrorCode.ABSTRACT_CLASS_MEMBER)
     ]);
   }
 
@@ -3426,8 +3430,8 @@ class DartEntryTest extends EngineTestCase {
 
   void test_setValue_resolutionErrors() {
     _setValueInLibrary(DartEntry.RESOLUTION_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(
-          null, CompileTimeErrorCode.CONST_CONSTRUCTOR_THROWS_EXCEPTION)
+      new AnalysisError(
+          null, 0, 0, CompileTimeErrorCode.CONST_CONSTRUCTOR_THROWS_EXCEPTION)
     ]);
   }
 
@@ -3437,8 +3441,8 @@ class DartEntryTest extends EngineTestCase {
 
   void test_setValue_scanErrors() {
     _setValue(DartEntry.SCAN_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(
-          null, ScannerErrorCode.UNTERMINATED_MULTI_LINE_COMMENT)
+      new AnalysisError(
+          null, 0, 0, ScannerErrorCode.UNTERMINATED_MULTI_LINE_COMMENT)
     ]);
   }
 
@@ -3452,7 +3456,7 @@ class DartEntryTest extends EngineTestCase {
 
   void test_setValue_verificationErrors() {
     _setValueInLibrary(DartEntry.VERIFICATION_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(null, StaticWarningCode.CASE_BLOCK_NOT_TERMINATED)
+      new AnalysisError(null, 0, 0, StaticWarningCode.CASE_BLOCK_NOT_TERMINATED)
     ]);
   }
 
@@ -3609,7 +3613,7 @@ class GenerateDartErrorsTaskTest extends EngineTestCase {
 
   void test_getSource() {
     Source source =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     GenerateDartErrorsTask task =
         new GenerateDartErrorsTask(null, source, null, null);
     expect(task.source, same(source));
@@ -3618,7 +3622,7 @@ class GenerateDartErrorsTaskTest extends EngineTestCase {
   void test_perform() {
     InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     Source source =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     ChangeSet changeSet = new ChangeSet();
     changeSet.addedSource(source);
     context.applyChanges(changeSet);
@@ -3639,7 +3643,7 @@ class A {
   void test_perform_validateDirectives() {
     InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     Source source =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     ChangeSet changeSet = new ChangeSet();
     changeSet.addedSource(source);
     context.applyChanges(changeSet);
@@ -3733,13 +3737,13 @@ class GenerateDartHintsTaskTest extends EngineTestCase {
     InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ChangeSet changeSet = new ChangeSet();
     Source librarySource =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     changeSet.addedSource(librarySource);
     Source unusedSource =
-        new FileBasedSource.con1(FileUtilities2.createFile("/unused.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/unused.dart"));
     changeSet.addedSource(unusedSource);
     Source partSource =
-        new FileBasedSource.con1(FileUtilities2.createFile("/part.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/part.dart"));
     changeSet.addedSource(partSource);
     context.applyChanges(changeSet);
     context.setContents(librarySource, r'''
@@ -3812,7 +3816,7 @@ class GenerateDartLintsTaskTest extends EngineTestCase {
     InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ChangeSet changeSet = new ChangeSet();
     Source librarySource =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     changeSet.addedSource(librarySource);
     context.applyChanges(changeSet);
     context.setContents(librarySource, r'''
@@ -3884,8 +3888,7 @@ class GetContentTaskTest extends EngineTestCase {
 
   void test_perform_valid() {
     Source source = new TestSource('/test.dart', 'class A {}');
-    InternalAnalysisContext context = new AnalysisContextImpl();
-    context.sourceFactory = new SourceFactory([new FileUriResolver()]);
+    InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     GetContentTask task = new GetContentTask(context, source);
     task.perform(new GetContentTaskTestTV_perform_valid(context, source));
   }
@@ -3939,13 +3942,13 @@ class HtmlEntryTest extends EngineTestCase {
     HtmlEntry entry = new HtmlEntry();
     expect(entry.allErrors, hasLength(0));
     entry.setValue(HtmlEntry.PARSE_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(source, ParserErrorCode.EXPECTED_TOKEN, [";"])
+      new AnalysisError(source, 0, 0, ParserErrorCode.EXPECTED_TOKEN, [";"])
     ]);
     entry.setValue(HtmlEntry.RESOLUTION_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(source, HtmlWarningCode.INVALID_URI, ["-"])
+      new AnalysisError(source, 0, 0, HtmlWarningCode.INVALID_URI, ["-"])
     ]);
     entry.setValue(HtmlEntry.HINTS,
-        <AnalysisError>[new AnalysisError.con1(source, HintCode.DEAD_CODE)]);
+        <AnalysisError>[new AnalysisError(source, 0, 0, HintCode.DEAD_CODE)]);
     expect(entry.allErrors, hasLength(3));
   }
 
@@ -4011,7 +4014,7 @@ class HtmlEntryTest extends EngineTestCase {
 
   void test_setValue_hints() {
     _setValue(HtmlEntry.HINTS,
-        <AnalysisError>[new AnalysisError.con1(null, HintCode.DEAD_CODE)]);
+        <AnalysisError>[new AnalysisError(null, 0, 0, HintCode.DEAD_CODE)]);
   }
 
   void test_setValue_illegal() {
@@ -4032,7 +4035,7 @@ class HtmlEntryTest extends EngineTestCase {
 
   void test_setValue_parseErrors() {
     _setValue(HtmlEntry.PARSE_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(null, HtmlWarningCode.INVALID_URI, ["-"])
+      new AnalysisError(null, 0, 0, HtmlWarningCode.INVALID_URI, ["-"])
     ]);
   }
 
@@ -4042,7 +4045,7 @@ class HtmlEntryTest extends EngineTestCase {
 
   void test_setValue_resolutionErrors() {
     _setValue(HtmlEntry.RESOLUTION_ERRORS, <AnalysisError>[
-      new AnalysisError.con1(null, HtmlWarningCode.INVALID_URI, ["-"])
+      new AnalysisError(null, 0, 0, HtmlWarningCode.INVALID_URI, ["-"])
     ]);
   }
 
@@ -4453,7 +4456,7 @@ class LintGeneratorTest extends EngineTestCase {
     InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ChangeSet changeSet = new ChangeSet();
     Source librarySource =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     changeSet.addedSource(librarySource);
     context.applyChanges(changeSet);
     context.setContents(librarySource, r'''
@@ -4480,7 +4483,7 @@ library lib;
     InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ChangeSet changeSet = new ChangeSet();
     Source librarySource =
-        new FileBasedSource.con1(FileUtilities2.createFile("/test.dart"));
+        new FileBasedSource(FileUtilities2.createFile("/test.dart"));
     changeSet.addedSource(librarySource);
     context.applyChanges(changeSet);
     context.setContents(librarySource, r'''
@@ -4577,8 +4580,7 @@ class ParseDartTaskTest extends EngineTestCase {
   void test_perform_exception() {
     TestSource source = new TestSource();
     source.generateExceptionOnRead = true;
-    InternalAnalysisContext context = new AnalysisContextImpl();
-    context.sourceFactory = new SourceFactory([new FileUriResolver()]);
+    InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ParseDartTask task = new ParseDartTask(context, source, null, null);
     task.perform(new ParseDartTaskTestTV_perform_exception());
   }
@@ -4591,8 +4593,7 @@ export 'lib3.dart';
 part 'part.dart';
 class A {''';
     Source source = new TestSource('/test.dart', content);
-    InternalAnalysisContext context = new AnalysisContextImpl();
-    context.sourceFactory = new SourceFactory([new FileUriResolver()]);
+    InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ParseDartTask task = _createParseTask(context, source, content);
     task.perform(new ParseDartTaskTestTV_perform_library(context, source));
   }
@@ -4602,8 +4603,7 @@ class A {''';
 part of lib;
 class B {}''';
     Source source = new TestSource('/test.dart', content);
-    InternalAnalysisContext context = new AnalysisContextImpl();
-    context.sourceFactory = new SourceFactory([new FileUriResolver()]);
+    InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ParseDartTask task = _createParseTask(context, source, content);
     task.perform(new ParseDartTaskTestTV_perform_part(context, source));
   }
@@ -4617,8 +4617,7 @@ export '${a}lib3.dart';
 part 'part.dart';
 class A {}''';
     Source source = new TestSource('/test.dart', content);
-    InternalAnalysisContext context = new AnalysisContextImpl();
-    context.sourceFactory = new SourceFactory([new FileUriResolver()]);
+    InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ParseDartTask task = _createParseTask(context, source, content);
     task.perform(
         new ParseDartTaskTestTV_perform_validateDirectives(context, source));
@@ -4636,7 +4635,7 @@ class A {}''';
   void test_resolveDirective_exception() {
     GatheringErrorListener listener = new GatheringErrorListener();
     ImportDirective directive = AstFactory.importDirective3('dart:core', null);
-    AnalysisContext context = new AnalysisContextImpl();
+    AnalysisContext context = AnalysisContextFactory.contextWithCore();
     context.sourceFactory = new MockSourceFactory();
     Source source =
         ParseDartTask.resolveDirective(context, null, directive, listener);
@@ -4753,9 +4752,8 @@ class ParseHtmlTaskTest extends EngineTestCase {
 
   ParseHtmlTask parseSource(
       Source source, String contents, TestLogger testLogger) {
-    InternalAnalysisContext context = new AnalysisContextImpl();
+    InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     context.setContents(source, contents);
-    context.sourceFactory = new SourceFactory([new FileUriResolver()]);
     ParseHtmlTask task = new ParseHtmlTask(context, source, contents);
     Logger oldLogger = AnalysisEngine.instance.logger;
     try {
@@ -4979,8 +4977,7 @@ class ResolveDartLibraryTaskTest extends EngineTestCase {
   void test_perform_exception() {
     TestSource source = new TestSource();
     source.generateExceptionOnRead = true;
-    InternalAnalysisContext context = new AnalysisContextImpl();
-    context.sourceFactory = new SourceFactory([new FileUriResolver()]);
+    InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ResolveDartLibraryTask task =
         new ResolveDartLibraryTask(context, source, source);
     task.perform(new ResolveDartLibraryTaskTestTV_perform_exception());
@@ -5154,8 +5151,7 @@ class ResolveHtmlTaskTest extends EngineTestCase {
 
   void test_perform_exception() {
     Source source = new TestSource();
-    InternalAnalysisContext context = new AnalysisContextImpl();
-    context.sourceFactory = new SourceFactory([new FileUriResolver()]);
+    InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ResolveHtmlTask task = new ResolveHtmlTask(context, source, 0, null);
     task.perform(new ResolveHtmlTaskTestTV_perform_exception());
   }
@@ -5249,8 +5245,7 @@ class ScanDartTaskTest extends EngineTestCase {
   void test_perform_valid() {
     String content = 'class A {}';
     Source source = new TestSource('test.dart', content);
-    InternalAnalysisContext context = new AnalysisContextImpl();
-    context.sourceFactory = new SourceFactory([new FileUriResolver()]);
+    InternalAnalysisContext context = AnalysisContextFactory.contextWithCore();
     ScanDartTask task = new ScanDartTask(context, source, content);
     task.perform(new ScanDartTaskTestTV_perform_valid(context, source));
   }
@@ -5371,7 +5366,7 @@ class SourcesChangedEventTest {
 
   static void assertEvent(SourcesChangedEvent event,
       {bool wereSourcesAdded: false,
-      List<Source> changedSources: Source.EMPTY_ARRAY,
+      List<Source> changedSources: Source.EMPTY_LIST,
       bool wereSourcesRemovedOrDeleted: false}) {
     expect(event.wereSourcesAdded, wereSourcesAdded);
     expect(event.changedSources, changedSources);
@@ -5383,7 +5378,7 @@ class SourcesChangedListener {
   List<SourcesChangedEvent> actualEvents = [];
 
   void assertEvent({bool wereSourcesAdded: false,
-      List<Source> changedSources: Source.EMPTY_ARRAY,
+      List<Source> changedSources: Source.EMPTY_LIST,
       bool wereSourcesRemovedOrDeleted: false}) {
     if (actualEvents.isEmpty) {
       fail('Expected event but found none');
@@ -5409,6 +5404,11 @@ class SourcesChangedListener {
  * method will cause a test to fail when invoked.
  */
 class TestAnalysisContext implements InternalAnalysisContext {
+  @override
+  AnalysisCache get analysisCache {
+    fail("Unexpected invocation of analysisCache");
+    return null;
+  }
   @override
   AnalysisOptions get analysisOptions {
     fail("Unexpected invocation of getAnalysisOptions");
@@ -5492,6 +5492,12 @@ class TestAnalysisContext implements InternalAnalysisContext {
   }
 
   @override
+  CachePartition get privateAnalysisCachePartition {
+    fail("Unexpected invocation of privateAnalysisCachePartition");
+    return null;
+  }
+
+  @override
   ResolverVisitorFactory get resolverVisitorFactory {
     fail("Unexpected invocation of getResolverVisitorFactory");
     return null;
@@ -5502,7 +5508,6 @@ class TestAnalysisContext implements InternalAnalysisContext {
     fail("Unexpected invocation of getSourceFactory");
     return null;
   }
-
   @override
   void set sourceFactory(SourceFactory factory) {
     fail("Unexpected invocation of setSourceFactory");
@@ -5534,10 +5539,6 @@ class TestAnalysisContext implements InternalAnalysisContext {
   @override
   void addListener(AnalysisListener listener) {
     fail("Unexpected invocation of addListener");
-  }
-  @override
-  void addSourceInfo(Source source, SourceEntry info) {
-    fail("Unexpected invocation of addSourceInfo");
   }
   @override
   void applyAnalysisDelta(AnalysisDelta delta) {
@@ -5689,6 +5690,11 @@ class TestAnalysisContext implements InternalAnalysisContext {
     return 0;
   }
   @override
+  ChangeNoticeImpl getNotice(Source source) {
+    fail("Unexpected invocation of getNotice");
+    return null;
+  }
+  @override
   Namespace getPublicNamespace(LibraryElement library) {
     fail("Unexpected invocation of getPublicNamespace");
     return null;
@@ -5722,6 +5728,10 @@ class TestAnalysisContext implements InternalAnalysisContext {
     return false;
   }
   @override
+  void invalidateLibraryHints(Source librarySource) {
+    fail("Unexpected invocation of invalidateLibraryHints");
+  }
+  @override
   bool isClientLibrary(Source librarySource) {
     fail("Unexpected invocation of isClientLibrary");
     return false;
@@ -5732,8 +5742,18 @@ class TestAnalysisContext implements InternalAnalysisContext {
     return false;
   }
   @override
+  Stream<ComputedResult> onResultComputed(ResultDescriptor descriptor) {
+    fail("Unexpected invocation of onResultComputed");
+    return null;
+  }
+  @override
   CompilationUnit parseCompilationUnit(Source source) {
     fail("Unexpected invocation of parseCompilationUnit");
+    return null;
+  }
+  @override
+  Document parseHtmlDocument(Source source) {
+    fail("Unexpected invocation of parseHtmlDocument");
     return null;
   }
   @override
@@ -5746,10 +5766,12 @@ class TestAnalysisContext implements InternalAnalysisContext {
     fail("Unexpected invocation of performAnalysisTask");
     return null;
   }
+
   @override
   void recordLibraryElements(Map<Source, LibraryElement> elementMap) {
     fail("Unexpected invocation of recordLibraryElements");
   }
+
   @override
   void removeListener(AnalysisListener listener) {
     fail("Unexpected invocation of removeListener");
@@ -5785,20 +5807,16 @@ class TestAnalysisContext implements InternalAnalysisContext {
   void setContents(Source source, String contents) {
     fail("Unexpected invocation of setContents");
   }
+  @override
+  bool shouldErrorsBeAnalyzed(Source source, Object entry) {
+    fail("Unexpected invocation of shouldErrorsBeAnalyzed");
+    return false;
+  }
 
   @override
   void visitCacheItems(void callback(Source source, SourceEntry dartEntry,
       DataDescriptor rowDesc, CacheState state)) {
     fail("Unexpected invocation of visitCacheItems");
-  }
-}
-
-class TestAnalysisContext_test_addSourceInfo extends TestAnalysisContext {
-  bool invoked = false;
-  TestAnalysisContext_test_addSourceInfo();
-  @override
-  void addSourceInfo(Source source, SourceEntry info) {
-    invoked = true;
   }
 }
 
@@ -5994,7 +6012,7 @@ class TestAnalysisContext_test_getHtmlFilesReferencing
   @override
   List<Source> getHtmlFilesReferencing(Source source) {
     invoked = true;
-    return Source.EMPTY_ARRAY;
+    return Source.EMPTY_LIST;
   }
 }
 
@@ -6004,7 +6022,7 @@ class TestAnalysisContext_test_getHtmlSources extends TestAnalysisContext {
   @override
   List<Source> get htmlSources {
     invoked = true;
-    return Source.EMPTY_ARRAY;
+    return Source.EMPTY_LIST;
   }
 }
 
@@ -6025,7 +6043,7 @@ class TestAnalysisContext_test_getLaunchableClientLibrarySources
   @override
   List<Source> get launchableClientLibrarySources {
     invoked = true;
-    return Source.EMPTY_ARRAY;
+    return Source.EMPTY_LIST;
   }
 }
 
@@ -6036,7 +6054,7 @@ class TestAnalysisContext_test_getLaunchableServerLibrarySources
   @override
   List<Source> get launchableServerLibrarySources {
     invoked = true;
-    return Source.EMPTY_ARRAY;
+    return Source.EMPTY_LIST;
   }
 }
 
@@ -6047,7 +6065,7 @@ class TestAnalysisContext_test_getLibrariesContaining
   @override
   List<Source> getLibrariesContaining(Source source) {
     invoked = true;
-    return Source.EMPTY_ARRAY;
+    return Source.EMPTY_LIST;
   }
 }
 
@@ -6058,7 +6076,7 @@ class TestAnalysisContext_test_getLibrariesDependingOn
   @override
   List<Source> getLibrariesDependingOn(Source librarySource) {
     invoked = true;
-    return Source.EMPTY_ARRAY;
+    return Source.EMPTY_LIST;
   }
 }
 
@@ -6089,7 +6107,7 @@ class TestAnalysisContext_test_getLibrarySources extends TestAnalysisContext {
   @override
   List<Source> get librarySources {
     invoked = true;
-    return Source.EMPTY_ARRAY;
+    return Source.EMPTY_LIST;
   }
 }
 
@@ -6590,7 +6608,7 @@ class _AnalysisContextImplTest_test_applyChanges_removeContainer
 
 class _Source_getContent_throwException extends NonExistingSource {
   _Source_getContent_throwException(String name)
-      : super(name, UriKind.FILE_URI);
+      : super(name, pathos.toUri(name), UriKind.FILE_URI);
 
   @override
   TimestampedData<String> get contents {

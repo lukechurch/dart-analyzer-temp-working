@@ -6,8 +6,10 @@ library test.src.mock_sdk;
 
 import 'package:analyzer/file_system/file_system.dart' as resource;
 import 'package:analyzer/file_system/memory_file_system.dart' as resource;
-import 'package:analyzer/src/context/context.dart' as newContext;
-import 'package:analyzer/src/generated/engine.dart';
+import 'package:analyzer/src/context/cache.dart';
+import 'package:analyzer/src/context/context.dart';
+import 'package:analyzer/src/generated/engine.dart'
+    show AnalysisEngine, ChangeSet;
 import 'package:analyzer/src/generated/sdk.dart';
 import 'package:analyzer/src/generated/source.dart';
 
@@ -176,9 +178,9 @@ class HtmlElement {}
       new resource.MemoryResourceProvider();
 
   /**
-   * The [AnalysisContext] which is used for all of the sources.
+   * The [AnalysisContextImpl] which is used for all of the sources.
    */
-  InternalAnalysisContext _analysisContext;
+  AnalysisContextImpl _analysisContext;
 
   MockSdk() {
     LIBRARIES.forEach((_MockSdkLibrary library) {
@@ -187,13 +189,9 @@ class HtmlElement {}
   }
 
   @override
-  AnalysisContext get context {
+  AnalysisContextImpl get context {
     if (_analysisContext == null) {
-      if (AnalysisEngine.instance.useTaskModel) {
-        _analysisContext = new newContext.SdkAnalysisContext();
-      } else {
-        _analysisContext = new SdkAnalysisContext();
-      }
+      _analysisContext = new _SdkAnalysisContext(this);
       SourceFactory factory = new SourceFactory([new DartUriResolver(this)]);
       _analysisContext.sourceFactory = factory;
       ChangeSet changeSet = new ChangeSet();
@@ -317,4 +315,23 @@ class _MockSdkLibrary implements SdkLibrary {
   bool get isVmLibrary => throw unimplemented;
 
   UnimplementedError get unimplemented => new UnimplementedError();
+}
+
+/**
+ * An [AnalysisContextImpl] that only contains sources for a Dart SDK.
+ */
+class _SdkAnalysisContext extends AnalysisContextImpl {
+  final DartSdk sdk;
+
+  _SdkAnalysisContext(this.sdk);
+
+  @override
+  AnalysisCache createCacheFromSourceFactory(SourceFactory factory) {
+    if (factory == null) {
+      return super.createCacheFromSourceFactory(factory);
+    }
+    return new AnalysisCache(<CachePartition>[
+      AnalysisEngine.instance.partitionManager_new.forSdk(sdk)
+    ]);
+  }
 }

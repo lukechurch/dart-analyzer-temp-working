@@ -15,8 +15,11 @@ import 'package:analyzer/src/generated/element.dart';
 import 'package:analyzer/src/generated/engine.dart';
 import 'package:analyzer/src/generated/java_core.dart';
 import 'package:analyzer/src/generated/resolver.dart';
+import 'package:analyzer/src/generated/scanner.dart';
 import 'package:analyzer/src/generated/source.dart';
+import 'package:analyzer/src/generated/testing/ast_factory.dart';
 import 'package:analyzer/src/generated/utilities_dart.dart';
+import 'package:path/path.dart';
 
 /**
  * The class `ElementFactory` defines utility methods used to create elements for testing
@@ -43,7 +46,7 @@ class ElementFactory {
       [List<String> parameterNames]) {
     ClassElementImpl element = new ClassElementImpl(typeName, 0);
     element.supertype = superclassType;
-    InterfaceTypeImpl type = new InterfaceTypeImpl.con1(element);
+    InterfaceTypeImpl type = new InterfaceTypeImpl(element);
     element.type = type;
     if (parameterNames != null) {
       int count = parameterNames.length;
@@ -54,7 +57,7 @@ class ElementFactory {
             new List<TypeParameterTypeImpl>(count);
         for (int i = 0; i < count; i++) {
           TypeParameterElementImpl typeParameter =
-              new TypeParameterElementImpl(parameterNames[i], 0);
+              typeParameterElement(parameterNames[i]);
           typeParameters[i] = typeParameter;
           typeParameterTypes[i] = new TypeParameterTypeImpl(typeParameter);
           typeParameter.type = typeParameterTypes[i];
@@ -74,7 +77,7 @@ class ElementFactory {
       [List<String> parameterNames]) {
     ClassElementImpl element =
         classElement(typeName, superclassType, parameterNames);
-    element.typedef = true;
+    element.mixinApplication = true;
     return element;
   }
 
@@ -82,10 +85,16 @@ class ElementFactory {
           [List<String> parameterNames]) =>
       classTypeAlias(typeName, objectType, parameterNames);
 
-  static CompilationUnitElementImpl compilationUnit(String fileName) {
-    Source source = new NonExistingSource(fileName, UriKind.FILE_URI);
+  static CompilationUnitElementImpl compilationUnit(String fileName,
+      [Source librarySource]) {
+    Source source =
+        new NonExistingSource(fileName, toUri(fileName), UriKind.FILE_URI);
     CompilationUnitElementImpl unit = new CompilationUnitElementImpl(fileName);
     unit.source = source;
+    if (librarySource == null) {
+      librarySource = source;
+    }
+    unit.librarySource = librarySource;
     return unit;
   }
 
@@ -114,7 +123,7 @@ class ElementFactory {
       constructor.parameters = <ParameterElement>[];
     }
     constructor.returnType = type;
-    FunctionTypeImpl constructorType = new FunctionTypeImpl.con1(constructor);
+    FunctionTypeImpl constructorType = new FunctionTypeImpl(constructor);
     constructor.type = constructorType;
     return constructor;
   }
@@ -131,7 +140,7 @@ class ElementFactory {
     // Build the enum.
     //
     ClassElementImpl enumElement = new ClassElementImpl(enumName, -1);
-    InterfaceTypeImpl enumType = new InterfaceTypeImpl.con1(enumElement);
+    InterfaceTypeImpl enumType = new InterfaceTypeImpl(enumElement);
     enumElement.type = enumType;
     enumElement.supertype = objectType;
     enumElement.enum2 = true;
@@ -164,7 +173,7 @@ class ElementFactory {
       for (int i = 0; i < constantCount; i++) {
         String constantName = constantNames[i];
         FieldElementImpl constantElement =
-            new ConstFieldElementImpl.con2(constantName, -1);
+            new ConstFieldElementImpl(constantName, -1);
         constantElement.static = true;
         constantElement.const3 = true;
         constantElement.type = enumType;
@@ -175,7 +184,7 @@ class ElementFactory {
             new DartObjectImpl(stringType, new StringState(constantName));
         DartObjectImpl value =
             new DartObjectImpl(enumType, new GenericState(fieldMap));
-        constantElement.evaluationResult = new EvaluationResultImpl.con1(value);
+        constantElement.evaluationResult = new EvaluationResultImpl(value);
         fields.add(constantElement);
       }
     }
@@ -209,7 +218,7 @@ class ElementFactory {
     getter.variable = field;
     getter.returnType = type;
     field.getter = getter;
-    FunctionTypeImpl getterType = new FunctionTypeImpl.con1(getter);
+    FunctionTypeImpl getterType = new FunctionTypeImpl(getter);
     getter.type = getterType;
     if (!isConst && !isFinal) {
       PropertyAccessorElementImpl setter =
@@ -220,7 +229,7 @@ class ElementFactory {
       setter.parameters =
           <ParameterElement>[requiredParameter2("_$name", type)];
       setter.returnType = VoidTypeImpl.instance;
-      setter.type = new FunctionTypeImpl.con1(setter);
+      setter.type = new FunctionTypeImpl(setter);
       field.setter = setter;
     }
     return field;
@@ -242,7 +251,7 @@ class ElementFactory {
     // We don't create parameter elements because we don't have parameter names
     FunctionElementImpl functionElement =
         new FunctionElementImpl(functionName, 0);
-    FunctionTypeImpl functionType = new FunctionTypeImpl.con1(functionElement);
+    FunctionTypeImpl functionType = new FunctionTypeImpl(functionElement);
     functionElement.type = functionType;
     // return type
     if (returnElement == null) {
@@ -277,7 +286,7 @@ class ElementFactory {
       List<String> names, List<ClassElement> namedParameters) {
     FunctionElementImpl functionElement =
         new FunctionElementImpl(functionName, 0);
-    FunctionTypeImpl functionType = new FunctionTypeImpl.con1(functionElement);
+    FunctionTypeImpl functionType = new FunctionTypeImpl(functionElement);
     functionElement.type = functionType;
     // parameters
     int normalCount = normalParameters == null ? 0 : normalParameters.length;
@@ -334,9 +343,17 @@ class ElementFactory {
     functionElement.returnType =
         returnType == null ? VoidTypeImpl.instance : returnType;
     functionElement.parameters = parameters;
-    FunctionTypeImpl functionType = new FunctionTypeImpl.con1(functionElement);
+    FunctionTypeImpl functionType = new FunctionTypeImpl(functionElement);
     functionElement.type = functionType;
     return functionElement;
+  }
+
+  static FunctionTypeAliasElementImpl functionTypeAliasElement(String name) {
+    FunctionTypeAliasElementImpl functionTypeAliasElement =
+        new FunctionTypeAliasElementImpl(name, -1);
+    functionTypeAliasElement.type =
+        new FunctionTypeImpl.forTypedef(functionTypeAliasElement);
+    return functionTypeAliasElement;
   }
 
   static PropertyAccessorElementImpl getterElement(
@@ -351,13 +368,14 @@ class ElementFactory {
     getter.variable = field;
     getter.returnType = type;
     field.getter = getter;
-    FunctionTypeImpl getterType = new FunctionTypeImpl.con1(getter);
+    FunctionTypeImpl getterType = new FunctionTypeImpl(getter);
     getter.type = getterType;
     return getter;
   }
 
   static HtmlElementImpl htmlUnit(AnalysisContext context, String fileName) {
-    Source source = new NonExistingSource(fileName, UriKind.FILE_URI);
+    Source source =
+        new NonExistingSource(fileName, toUri(fileName), UriKind.FILE_URI);
     HtmlElementImpl unit = new HtmlElementImpl(context, fileName);
     unit.source = source;
     return unit;
@@ -406,7 +424,7 @@ class ElementFactory {
       method.parameters = parameters;
     }
     method.returnType = returnType;
-    FunctionTypeImpl methodType = new FunctionTypeImpl.con1(method);
+    FunctionTypeImpl methodType = new FunctionTypeImpl(method);
     method.type = methodType;
     return method;
   }
@@ -417,7 +435,7 @@ class ElementFactory {
     MethodElementImpl method = new MethodElementImpl(methodName, 0);
     method.parameters = parameters;
     method.returnType = returnType;
-    FunctionTypeImpl methodType = new FunctionTypeImpl.con1(method);
+    FunctionTypeImpl methodType = new FunctionTypeImpl(method);
     methodType.typeArguments = typeArguments;
     method.type = methodType;
     return method;
@@ -477,7 +495,7 @@ class ElementFactory {
     getter.variable = field;
     getter.returnType = type;
     field.getter = getter;
-    FunctionTypeImpl getterType = new FunctionTypeImpl.con1(getter);
+    FunctionTypeImpl getterType = new FunctionTypeImpl(getter);
     getter.type = getterType;
     ParameterElementImpl parameter = requiredParameter2("a", type);
     PropertyAccessorElementImpl setter =
@@ -487,7 +505,7 @@ class ElementFactory {
     setter.variable = field;
     setter.parameters = <ParameterElement>[parameter];
     setter.returnType = VoidTypeImpl.instance;
-    setter.type = new FunctionTypeImpl.con1(setter);
+    setter.type = new FunctionTypeImpl(setter);
     field.setter = setter;
     return setter;
   }
@@ -500,8 +518,16 @@ class ElementFactory {
 
   static TopLevelVariableElementImpl topLevelVariableElement3(
       String name, bool isConst, bool isFinal, DartType type) {
-    TopLevelVariableElementImpl variable =
-        new TopLevelVariableElementImpl(name, -1);
+    TopLevelVariableElementImpl variable;
+    if (isConst) {
+      ConstTopLevelVariableElementImpl constant =
+          new ConstTopLevelVariableElementImpl(AstFactory.identifier3(name));
+      constant.constantInitializer = AstFactory.instanceCreationExpression2(
+          Keyword.CONST, AstFactory.typeName(type.element));
+      variable = constant;
+    } else {
+      variable = new TopLevelVariableElementImpl(name, -1);
+    }
     variable.const3 = isConst;
     variable.final2 = isFinal;
     variable.synthetic = true;
@@ -512,7 +538,7 @@ class ElementFactory {
     getter.variable = variable;
     getter.returnType = type;
     variable.getter = getter;
-    FunctionTypeImpl getterType = new FunctionTypeImpl.con1(getter);
+    FunctionTypeImpl getterType = new FunctionTypeImpl(getter);
     getter.type = getterType;
     if (!isConst && !isFinal) {
       PropertyAccessorElementImpl setter =
@@ -524,9 +550,12 @@ class ElementFactory {
       setter.parameters =
           <ParameterElement>[requiredParameter2("_$name", type)];
       setter.returnType = VoidTypeImpl.instance;
-      setter.type = new FunctionTypeImpl.con1(setter);
+      setter.type = new FunctionTypeImpl(setter);
       variable.setter = setter;
     }
     return variable;
   }
+
+  static TypeParameterElementImpl typeParameterElement(String name) =>
+      new TypeParameterElementImpl(name, 0);
 }

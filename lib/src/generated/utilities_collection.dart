@@ -560,7 +560,7 @@ class MultipleMapIterator<K, V> implements MapIterator<K, V> {
    */
   MultipleMapIterator(List<Map<K, V>> maps) {
     int count = maps.length;
-    _iterators = new List<MapIterator>(count);
+    _iterators = new List<MapIterator<K, V>>(count);
     for (int i = 0; i < count; i++) {
       _iterators[i] = new SingleMapIterator<K, V>(maps[i]);
     }
@@ -681,6 +681,9 @@ class SingleMapIterator<K, V> implements MapIterator<K, V> {
     if (_currentKey == null) {
       throw new NoSuchElementException();
     }
+    if (_currentValue == null) {
+      _currentValue = _map[_currentKey];
+    }
     return _currentValue;
   }
 
@@ -697,7 +700,7 @@ class SingleMapIterator<K, V> implements MapIterator<K, V> {
   bool moveNext() {
     if (_keyIterator.moveNext()) {
       _currentKey = _keyIterator.current;
-      _currentValue = _map[_currentKey];
+      _currentValue = null;
       return true;
     } else {
       _currentKey = null;

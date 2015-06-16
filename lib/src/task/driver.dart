@@ -8,12 +8,17 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:analyzer/src/context/cache.dart';
-import 'package:analyzer/src/generated/engine.dart' hide AnalysisTask;
+import 'package:analyzer/src/generated/engine.dart'
+    hide AnalysisTask, AnalysisContextImpl;
 import 'package:analyzer/src/generated/java_engine.dart';
 import 'package:analyzer/src/generated/resolver.dart';
+import 'package:analyzer/src/generated/utilities_general.dart';
 import 'package:analyzer/src/task/inputs.dart';
 import 'package:analyzer/src/task/manager.dart';
 import 'package:analyzer/task/model.dart';
+
+final PerformanceTag workOrderMoveNextPerfTag =
+    new PerformanceTag('WorkOrder.moveNext');
 
 /**
  * An object that is used to cause analysis to be performed until all of the
@@ -26,15 +31,34 @@ class AnalysisDriver {
   final TaskManager taskManager;
 
   /**
+   * The list of [WorkManager] used to figure out which analysis results to
+   * compute.
+   */
+  final List<WorkManager> workManagers;
+
+  /**
    * The context in which analysis is to be performed.
    */
   final InternalAnalysisContext context;
+
+  /**
+   * The map of [ComputedResult] controllers.
+   */
+  final Map<ResultDescriptor, StreamController<ComputedResult>> resultComputedControllers =
+      <ResultDescriptor, StreamController<ComputedResult>>{};
 
   /**
    * The work order that was previously computed but that has not yet been
    * completed.
    */
   WorkOrder currentWorkOrder;
+
+  /**
+   * Indicates whether any tasks are currently being performed (or building
+   * their inputs).  In debug builds, we use this to ensure that tasks don't
+   * try to make use of the task manager in reentrant fashion.
+   */
+  bool isTaskRunning = false;
 
   /**
    * The controller that is notified when a task is started.
@@ -50,7 +74,7 @@ class AnalysisDriver {
    * Initialize a newly created driver to use the tasks know to the given
    * [taskManager] to perform analysis in the given [context].
    */
-  AnalysisDriver(this.taskManager, this.context) {
+  AnalysisDriver(this.taskManager, this.workManagers, this.context) {
     _onTaskStartedController = new StreamController.broadcast();
     _onTaskCompletedController = new StreamController.broadcast();
   }
@@ -70,14 +94,20 @@ class AnalysisDriver {
    * [target]. Return the last [AnalysisTask] that was performed.
    */
   AnalysisTask computeResult(AnalysisTarget target, ResultDescriptor result) {
-    AnalysisTask task;
-    WorkOrder workOrder = createWorkOrderForResult(target, result);
-    if (workOrder != null) {
-      while (workOrder.moveNext()) {
-        task = performWorkItem(workOrder.current);
+    assert(!isTaskRunning);
+    try {
+      isTaskRunning = true;
+      AnalysisTask task;
+      WorkOrder workOrder = createWorkOrderForResult(target, result);
+      if (workOrder != null) {
+        while (workOrder.moveNext()) {
+          task = performWorkItem(workOrder.current);
+        }
       }
+      return task;
+    } finally {
+      isTaskRunning = false;
     }
-    return task;
   }
 
   /**
@@ -85,28 +115,32 @@ class AnalysisDriver {
    * or `null` if there is currently no work to be done.
    */
   WorkOrder createNextWorkOrder() {
-    //
-    // TODO(brianwilkerson) This is an inefficient implementation. We need to
-    // port over the concept of the WorkManager to manage the list of sources
-    // for which some work needs to be performed so that we do not waste time
-    // repeatedly looking at the same completed sources to see whether there is
-    // work that needs to be done.
-    //
-    for (AnalysisTarget target in context.priorityTargets) {
-      WorkOrder workOrder = createWorkOrderForTarget(target, true);
-      if (workOrder != null) {
-        return workOrder;
+    while (true) {
+      // Find the WorkManager with the highest priority.
+      WorkOrderPriority highestPriority = null;
+      WorkManager highestManager = null;
+      for (WorkManager manager in workManagers) {
+        WorkOrderPriority priority = manager.getNextResultPriority();
+        if (highestPriority == null || highestPriority.index > priority.index) {
+          highestPriority = priority;
+          highestManager = manager;
+        }
+      }
+      // Nothing to do.
+      if (highestPriority == WorkOrderPriority.NONE) {
+        return null;
+      }
+      // Create a new WorkOrder.
+      TargetedResult request = highestManager.getNextResult();
+//      print('request: $request');
+      if (request != null) {
+        WorkOrder workOrder =
+            createWorkOrderForResult(request.target, request.result);
+        if (workOrder != null) {
+          return workOrder;
+        }
       }
     }
-    // TODO(brianwilkerson) Add a third priority, corresponding to
-    // AnalysisContextImpl._pendingFutureSources to support code completion.
-    for (AnalysisTarget target in context.explicitTargets) {
-      WorkOrder workOrder = createWorkOrderForTarget(target, false);
-      if (workOrder != null) {
-        return workOrder;
-      }
-    }
-    return null;
   }
 
   /**
@@ -124,8 +158,9 @@ class AnalysisDriver {
       return null;
     }
     try {
-      return new WorkOrder(taskManager,
-          new WorkItem(context, target, taskManager.findTask(target, result)));
+      TaskDescriptor taskDescriptor = taskManager.findTask(target, result);
+      WorkItem workItem = new WorkItem(context, target, taskDescriptor, result);
+      return new WorkOrder(taskManager, workItem);
     } catch (exception, stackTrace) {
       throw new AnalysisException(
           'Could not create work order (target = $target; result = $result)',
@@ -158,6 +193,15 @@ class AnalysisDriver {
   }
 
   /**
+   * Return the stream that is notified when a new value for the given
+   * [descriptor] is computed.
+   */
+  Stream<ComputedResult> onResultComputed(ResultDescriptor descriptor) {
+    return resultComputedControllers.putIfAbsent(descriptor, () =>
+        new StreamController<ComputedResult>.broadcast(sync: true)).stream;
+  }
+
+  /**
    * Perform the next analysis task, and return `true` if there is more work to
    * be done in order to compute all of the required analysis information.
    */
@@ -182,14 +226,20 @@ class AnalysisDriver {
     // simply says "do some work", and the engine chooses the best thing to do
     // next regardless of what context it's in.
     //
-    if (currentWorkOrder == null) {
-      currentWorkOrder = createNextWorkOrder();
-    } else if (currentWorkOrder.moveNext()) {
-      performWorkItem(currentWorkOrder.current);
-    } else {
-      currentWorkOrder = createNextWorkOrder();
+    assert(!isTaskRunning);
+    try {
+      isTaskRunning = true;
+      if (currentWorkOrder == null) {
+        currentWorkOrder = createNextWorkOrder();
+      } else if (currentWorkOrder.moveNext()) {
+        performWorkItem(currentWorkOrder.current);
+      } else {
+        currentWorkOrder = createNextWorkOrder();
+      }
+      return currentWorkOrder != null;
+    } finally {
+      isTaskRunning = false;
     }
-    return currentWorkOrder != null;
   }
 
   /**
@@ -208,13 +258,27 @@ class AnalysisDriver {
     AnalysisTask task = item.buildTask();
     _onTaskStartedController.add(task);
     task.perform();
-    CacheEntry entry = context.getCacheEntry(task.target);
+    AnalysisTarget target = task.target;
+    CacheEntry entry = context.getCacheEntry(target);
     if (task.caughtException == null) {
+      List<TargetedResult> dependedOn = item.inputTargetedResults.toList();
       Map<ResultDescriptor, dynamic> outputs = task.outputs;
       for (ResultDescriptor result in task.descriptor.results) {
         // TODO(brianwilkerson) We could check here that a value was produced
         // and throw an exception if not (unless we want to allow null values).
-        entry.setValue(result, outputs[result]);
+        entry.setValue(result, outputs[result], dependedOn);
+      }
+      outputs.forEach((ResultDescriptor descriptor, value) {
+        StreamController<ComputedResult> controller =
+            resultComputedControllers[descriptor];
+        if (controller != null) {
+          ComputedResult event =
+              new ComputedResult(context, descriptor, target, value);
+          controller.add(event);
+        }
+      });
+      for (WorkManager manager in workManagers) {
+        manager.resultsComputed(target, outputs);
       }
     } else {
       entry.setErrorState(task.caughtException, item.descriptor.results);
@@ -230,6 +294,156 @@ class AnalysisDriver {
    */
   void reset() {
     currentWorkOrder = null;
+  }
+}
+
+/**
+ * Generic dependency walker suitable for use in the analysis task driver.
+ * This class implements a variant of the path-based strong component algorithm
+ * (described here: http://www.cs.colorado.edu/~hal/Papers/DFS/ipl.ps.gz), with
+ * the following differences:
+ *
+ * - The algorithm is non-recursive so that it can be used in a coroutine
+ *   fashion (each call to [getNextStronglyConnectedComponent] computes a
+ *   single strongly connected component and then waits to be called again)
+ *
+ * - Instead of keeping a temporary array which maps nodes to their locations
+ *   in the [path] array, we simply search the array when necessary.  This
+ *   allows us to begin finding strongly connected components without having to
+ *   know the size of the whole graph.
+ *
+ * - This algorithm does not compute all strongly connected components; only
+ *   those reachable from the starting point which are as yet unevaluated.
+ *
+ * The algorithm, in essence, is to traverse the dependency graph in
+ * depth-first fashion from a starting node.  If the path from the starting
+ * node ever encounters the same node twice, then a cycle has been found, and
+ * all the nodes comprising the cycle are (conceptually) contracted into a
+ * single node.  The algorithm yields possibly-collapsed nodes in proper
+ * topological sort order (all the dependencies of a node are yielded before,
+ * or in the same contracted component as, the node itself).
+ */
+abstract class CycleAwareDependencyWalker<Node> {
+  /**
+   * The path through the dependency graph that is currently being considered,
+   * with un-collapsed nodes.
+   */
+  final List<Node> _path;
+
+  /**
+   * For each node in [_path], a list of the unevaluated nodes which it is
+   * already known to depend on.
+   */
+  final List<List<Node>> _provisionalDependencies;
+
+  /**
+   * Indices into [_path] of the nodes which begin a new strongly connected
+   * component, in order.  The first index in [_contractedPath] is always 0.
+   *
+   * For all i < contractedPath.length - 1, at least one node in the strongly
+   * connected component represented by [contractedPath[i]] depends directly
+   * on at least one node in the strongly connected component represented by
+   * [contractedPath[i+1]].
+   */
+  final List<int> _contractedPath;
+
+  /**
+   * Index into [_path] of the nodes which we are currently in the process of
+   * querying for their dependencies.
+   *
+   * [currentIndices.last] always refers to a member of the last strongly
+   * connected component indicated by [_contractedPath].
+   */
+  final List<int> _currentIndices;
+
+  /**
+   * Begin walking dependencies starting at [startingNode].
+   */
+  CycleAwareDependencyWalker(Node startingNode)
+      : _path = <Node>[startingNode],
+        _provisionalDependencies = <List<Node>>[<Node>[]],
+        _contractedPath = <int>[0],
+        _currentIndices = <int>[0];
+
+  /**
+   * Determine the next unevaluated input for [node], skipping any inputs in
+   * [skipInputs], and return it.  If [node] has no further inputs, return
+   * `null`.
+   */
+  Node getNextInput(Node node, List<Node> skipInputs);
+
+  /**
+   * Determine the next strongly connected component in the graph, and return
+   * it.  The client is expected to evaluate this component before calling
+   * [getNextStronglyConnectedComponent] again.
+   */
+  StronglyConnectedComponent<Node> getNextStronglyConnectedComponent() {
+    while (_currentIndices.isNotEmpty) {
+      Node nextUnevaluatedInput = getNextInput(_path[_currentIndices.last],
+          _provisionalDependencies[_currentIndices.last]);
+      assert(!_provisionalDependencies[_currentIndices.last]
+          .contains(nextUnevaluatedInput));
+      if (nextUnevaluatedInput != null) {
+        // TODO(paulberry): the call to _path.indexOf makes the algorithm
+        // O(n^2) in the depth of the dependency graph.  If this becomes a
+        // problem, consider maintaining a map from node to index.
+        int previousIndex = _path.indexOf(nextUnevaluatedInput);
+        if (previousIndex != -1) {
+          // Update contractedPath to indicate that all nodes in the path
+          // between previousIndex and currentIndex are part of the same
+          // strongly connected component.
+          while (_contractedPath.last > previousIndex) {
+            _contractedPath.removeLast();
+          }
+          // Store nextUnevaluatedInput as a provisional dependency so that we
+          // can move on to computing other dependencies.
+          _provisionalDependencies[_currentIndices.last]
+              .add(nextUnevaluatedInput);
+          // And loop to move on to the node's next input.
+          continue;
+        } else {
+          // This is a brand new input and there's no reason (yet) to believe
+          // that it is in the same strongly connected component as any other
+          // node, so push it onto the end of the path.
+          int newIndex = _path.length;
+          _path.add(nextUnevaluatedInput);
+          _provisionalDependencies.add(<Node>[]);
+          _contractedPath.add(newIndex);
+          _currentIndices.add(newIndex);
+          // And loop to move on to the new node's inputs.
+          continue;
+        }
+      } else {
+        // The node has no more inputs.  Figure out if there are any more nodes
+        // in the current strongly connected component that need to have their
+        // indices examined.
+        _currentIndices.removeLast();
+        if (_currentIndices.isEmpty ||
+            _currentIndices.last < _contractedPath.last) {
+          // No more nodes in the current strongly connected component need to
+          // have their indices examined.  We can now yield this component to
+          // the caller.
+          List<Node> nodes = _path.sublist(_contractedPath.last);
+          bool containsCycle = nodes.length > 1;
+          if (!containsCycle) {
+            if (_provisionalDependencies.last.isNotEmpty) {
+              containsCycle = true;
+            }
+          }
+          _path.length = _contractedPath.last;
+          _provisionalDependencies.length = _contractedPath.last;
+          _contractedPath.removeLast();
+          return new StronglyConnectedComponent<Node>(nodes, containsCycle);
+        } else {
+          // At least one node in the current strongly connected component
+          // still needs to have its inputs examined.  So loop and allow the
+          // inputs to be examined.
+          continue;
+        }
+      }
+    }
+    // No further strongly connected components found.
+    return null;
   }
 }
 
@@ -251,11 +465,40 @@ abstract class ExtendedAnalysisContext implements InternalAnalysisContext {
  */
 class InfiniteTaskLoopException extends AnalysisException {
   /**
-   * Initialize a newly created exception to represent an attempt to perform
-   * the task for the target represented by the given [item].
+   * If a dependency cycle was found while computing the inputs for the task,
+   * the set of [WorkItem]s contained in the cycle (if there are overlapping
+   * cycles, this is the set of all [WorkItem]s in the entire strongly
+   * connected component).  Otherwise, `null`.
    */
-  InfiniteTaskLoopException(WorkItem item) : super(
-          'Infinite loop while performing task ${item.descriptor.name} for ${item.target}');
+  final List<WorkItem> dependencyCycle;
+
+  /**
+   * Initialize a newly created exception to represent a failed attempt to
+   * perform the given [task] due to the given [dependencyCycle].
+   */
+  InfiniteTaskLoopException(AnalysisTask task, this.dependencyCycle) : super(
+          'Infinite loop while performing task ${task.descriptor.name} for ${task.target}');
+}
+
+/**
+ * Object used by CycleAwareDependencyWalker to report a single strongly
+ * connected component of nodes.
+ */
+class StronglyConnectedComponent<Node> {
+  /**
+   * The nodes contained in the strongly connected component.
+   */
+  final List<Node> nodes;
+
+  /**
+   * Indicates whether the strongly component contains any cycles.  Note that
+   * if [nodes] has multiple elements, this will always be `true`.  However, if
+   * [nodes] has exactly one element, this may be either `true` or `false`
+   * depending on whether the node has a dependency on itself.
+   */
+  final bool containsCycle;
+
+  StronglyConnectedComponent(this.nodes, this.containsCycle);
 }
 
 /**
@@ -279,11 +522,22 @@ class WorkItem {
   final TaskDescriptor descriptor;
 
   /**
+   * The [ResultDescriptor] which was led to this work item being spawned.
+   */
+  final ResultDescriptor spawningResult;
+
+  /**
    * An iterator used to iterate over the descriptors of the inputs to the task,
    * or `null` if all of the inputs have been collected and the task can be
    * created.
    */
   TaskInputBuilder builder;
+
+  /**
+   * The [TargetedResult]s outputs of this task depends on.
+   */
+  final HashSet<TargetedResult> inputTargetedResults =
+      new HashSet<TargetedResult>();
 
   /**
    * The inputs to the task that have been computed.
@@ -299,10 +553,18 @@ class WorkItem {
   CaughtException exception = null;
 
   /**
+   * If a dependency cycle was found while computing the inputs for the task,
+   * the set of [WorkItem]s contained in the cycle (if there are overlapping
+   * cycles, this is the set of all [WorkItem]s in the entire strongly
+   * connected component).  Otherwise, `null`.
+   */
+  List<WorkItem> dependencyCycle;
+
+  /**
    * Initialize a newly created work item to compute the inputs for the task
    * described by the given descriptor.
    */
-  WorkItem(this.context, this.target, this.descriptor) {
+  WorkItem(this.context, this.target, this.descriptor, this.spawningResult) {
     AnalysisTarget actualTarget = identical(
             target, AnalysisContextTarget.request)
         ? new AnalysisContextTarget(context)
@@ -316,6 +578,19 @@ class WorkItem {
     inputs = new HashMap<String, dynamic>();
   }
 
+  @override
+  int get hashCode =>
+      JenkinsSmiHash.hash2(descriptor.hashCode, target.hashCode);
+
+  @override
+  bool operator ==(other) {
+    if (other is WorkItem) {
+      return this.descriptor == other.descriptor && this.target == other.target;
+    } else {
+      return false;
+    }
+  }
+
   /**
    * Build the task represented by this work item.
    */
@@ -323,7 +598,9 @@ class WorkItem {
     if (builder != null) {
       throw new StateError("some inputs have not been computed");
     }
-    return descriptor.createTask(context, target, inputs);
+    AnalysisTask task = descriptor.createTask(context, target, inputs);
+    task.dependencyCycle = dependencyCycle;
+    return task;
   }
 
   /**
@@ -342,19 +619,19 @@ class WorkItem {
    * if the field is non-`null` then the task cannot be performed and all of the
    * tasks' results should be marked as being in ERROR.
    */
-  WorkItem gatherInputs(TaskManager taskManager) {
+  WorkItem gatherInputs(TaskManager taskManager, List<WorkItem> skipInputs) {
     while (builder != null) {
-      //
-      // TODO(brianwilkerson) Capture information about which inputs were used
-      // to compute the results. This information can later be used to compute
-      // which results depend on a given result, and hence which results need to
-      // be invalidated when one result is invalidated.
-      //
       AnalysisTarget inputTarget = builder.currentTarget;
       ResultDescriptor inputResult = builder.currentResult;
+      inputTargetedResults.add(new TargetedResult(inputTarget, inputResult));
       CacheEntry inputEntry = context.getCacheEntry(inputTarget);
       CacheState inputState = inputEntry.getState(inputResult);
-      if (inputState == CacheState.ERROR) {
+      if (skipInputs.any((WorkItem item) =>
+          item.target == inputTarget && item.spawningResult == inputResult)) {
+        // This input is being skipped due to a circular dependency.  Tell the
+        // builder that it's not available so we can move on to other inputs.
+        builder.currentValueNotAvailable();
+      } else if (inputState == CacheState.ERROR) {
         exception = inputEntry.exception;
         return null;
       } else if (inputState == CacheState.IN_PROCESS) {
@@ -369,17 +646,19 @@ class WorkItem {
         // IN_PROCESS is CONTENT, I don't know that it's worth the extra effort
         // to implement the general solution at this point.
         //
+        throw new UnimplementedError();
       } else if (inputState != CacheState.VALID) {
         try {
           TaskDescriptor descriptor =
               taskManager.findTask(inputTarget, inputResult);
-          return new WorkItem(context, inputTarget, descriptor);
+          return new WorkItem(context, inputTarget, descriptor, inputResult);
         } on AnalysisException catch (exception, stackTrace) {
           this.exception = new CaughtException(exception, stackTrace);
           return null;
         }
+      } else {
+        builder.currentValue = inputEntry.getValue(inputResult);
       }
-      builder.currentValue = inputEntry.getValue(inputResult);
       if (!builder.moveNext()) {
         inputs = builder.inputValue;
         builder = null;
@@ -393,76 +672,146 @@ class WorkItem {
 }
 
 /**
+ * [AnalysisDriver] uses [WorkManager]s to select results to compute.
+ *
+ * They know specific of the targets and results they care about,
+ * so they can request analysis results in optimal order.
+ */
+abstract class WorkManager {
+  /**
+   * Notifies the managers that the given set of priority [targets] was set.
+   */
+  void applyPriorityTargets(List<AnalysisTarget> targets);
+
+  /**
+   * Return the next [TargetedResult] that this work manager wants to be
+   * computed, or `null` if this manager doesn't need any new results.
+   */
+  TargetedResult getNextResult();
+
+  /**
+   * Return the priority if the next work order this work manager want to be
+   * computed. The [AnalysisDriver] will perform the work order with
+   * the highest priority.
+   *
+   * Even if the returned value is [WorkOrderPriority.NONE], it still does not
+   * guarantee that [getNextResult] will return not `null`.
+   */
+  WorkOrderPriority getNextResultPriority();
+
+  /**
+   * Notifies the manager that the given [outputs] were produced for
+   * the given [target].
+   */
+  void resultsComputed(
+      AnalysisTarget target, Map<ResultDescriptor, dynamic> outputs);
+}
+
+/**
  * A description of the work to be done to compute a desired analysis result.
  * The class implements a lazy depth-first traversal of the work item's input.
  */
 class WorkOrder implements Iterator<WorkItem> {
   /**
-   * The task manager used to build work items.
+   * The dependency walker which is being used to determine what work to do
+   * next.
    */
-  final TaskManager taskManager;
+  final _WorkOrderDependencyWalker _dependencyWalker;
 
   /**
-   * A list containing the work items that are being prepared for being worked.
+   * The strongly connected component most recently returned by
+   * [_dependencyWalker], minus any [WorkItem]s that the iterator has already
+   * moved past.
+   *
+   * Null if the [_dependencyWalker] hasn't been used yet.
    */
-  final List<WorkItem> pendingItems = <WorkItem>[];
-
-  /**
-   * The current work item.
-   */
-  WorkItem currentItem;
+  List<WorkItem> currentItems;
 
   /**
    * Initialize a newly created work order to compute the result described by
    * the given work item.
    */
-  WorkOrder(this.taskManager, WorkItem item) {
-    pendingItems.add(item);
-  }
+  WorkOrder(TaskManager taskManager, WorkItem item)
+      : _dependencyWalker = new _WorkOrderDependencyWalker(taskManager, item);
 
   @override
   WorkItem get current {
-    return currentItem;
+    if (currentItems == null) {
+      return null;
+    } else {
+      return currentItems.last;
+    }
   }
 
   @override
   bool moveNext() {
-    if (pendingItems.isEmpty) {
-      currentItem = null;
-      return false;
-    }
-    currentItem = pendingItems.removeLast();
-    WorkItem childItem = currentItem.gatherInputs(taskManager);
-    while (childItem != null) {
-      pendingItems.add(currentItem);
-      currentItem = childItem;
-      if (_hasInfiniteTaskLoop()) {
-        currentItem = pendingItems.removeLast();
-        try {
-          throw new InfiniteTaskLoopException(childItem);
-        } on InfiniteTaskLoopException catch (exception, stackTrace) {
-          currentItem.exception = new CaughtException(exception, stackTrace);
+    return workOrderMoveNextPerfTag.makeCurrentWhile(() {
+      if (currentItems != null && currentItems.length > 1) {
+        // Yield more items.
+        currentItems.removeLast();
+        return true;
+      } else {
+        // Get a new strongly connected component.
+        StronglyConnectedComponent<WorkItem> nextStronglyConnectedComponent =
+            _dependencyWalker.getNextStronglyConnectedComponent();
+        if (nextStronglyConnectedComponent == null) {
+          currentItems = null;
+          return false;
+        }
+        currentItems = nextStronglyConnectedComponent.nodes;
+        if (nextStronglyConnectedComponent.containsCycle) {
+          // A cycle has been found.
+          for (WorkItem item in currentItems) {
+            item.dependencyCycle = currentItems.toList();
+          }
+        } else {
+          assert(currentItems.length == 1);
         }
         return true;
       }
-      childItem = currentItem.gatherInputs(taskManager);
-    }
-    return true;
+    });
   }
+}
+
+/**
+ * The priorities of work orders returned by [WorkManager]s.
+ */
+enum WorkOrderPriority {
+  /**
+   * Responding to an user's action.
+   */
+  INTERACTIVE,
 
   /**
-   * Check to see whether the current work item is attempting to perform the
-   * same task on the same target as any of the pending work items. If it is,
-   * then throw an [InfiniteTaskLoopException].
+   * Computing information for priority sources.
    */
-  bool _hasInfiniteTaskLoop() {
-    TaskDescriptor descriptor = currentItem.descriptor;
-    AnalysisTarget target = currentItem.target;
-    for (WorkItem item in pendingItems) {
-      if (item.descriptor == descriptor && item.target == target) {
-        return true;
-      }
-    }
-    return false;
+  PRIORITY,
+
+  /**
+   * A work should be done, but without any special urgency.
+   */
+  NORMAL,
+
+  /**
+   * Nothing to do.
+   */
+  NONE
+}
+
+/**
+ * Specilaization of [CycleAwareDependencyWalker] for use by [WorkOrder].
+ */
+class _WorkOrderDependencyWalker extends CycleAwareDependencyWalker<WorkItem> {
+  /**
+   * The task manager used to build work items.
+   */
+  final TaskManager taskManager;
+
+  _WorkOrderDependencyWalker(this.taskManager, WorkItem startingNode)
+      : super(startingNode);
+
+  @override
+  WorkItem getNextInput(WorkItem node, List<WorkItem> skipInputs) {
+    return node.gatherInputs(taskManager, skipInputs);
   }
 }

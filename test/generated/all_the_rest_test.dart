@@ -7,8 +7,6 @@
 
 library engine.all_the_rest_test;
 
-import 'dart:collection';
-
 import 'package:analyzer/file_system/file_system.dart';
 import 'package:analyzer/file_system/memory_file_system.dart';
 import 'package:analyzer/file_system/physical_file_system.dart';
@@ -33,12 +31,15 @@ import 'package:analyzer/src/generated/testing/ast_factory.dart';
 import 'package:analyzer/src/generated/testing/element_factory.dart';
 import 'package:analyzer/src/generated/testing/html_factory.dart';
 import 'package:analyzer/src/generated/testing/test_type_provider.dart';
+import 'package:analyzer/src/generated/testing/token_factory.dart';
 import 'package:analyzer/src/generated/utilities_collection.dart';
 import 'package:analyzer/src/generated/utilities_dart.dart';
-import 'package:path/src/context.dart';
+import 'package:analyzer/src/task/dart.dart';
+import 'package:path/path.dart';
 import 'package:unittest/unittest.dart';
 
 import '../reflective_tests.dart';
+import 'engine_test.dart';
 import 'parser_test.dart';
 import 'resolver_test.dart';
 import 'test_support.dart';
@@ -65,10 +66,12 @@ main() {
   runReflectiveTests(ExitDetectorTest2);
   runReflectiveTests(FileBasedSourceTest);
   runReflectiveTests(FileUriResolverTest);
-  runReflectiveTests(HtmlParserTest);
-  runReflectiveTests(HtmlTagInfoBuilderTest);
-  runReflectiveTests(HtmlUnitBuilderTest);
-  runReflectiveTests(HtmlWarningCodeTest);
+  if (!AnalysisEngine.instance.useTaskModel) {
+    runReflectiveTests(HtmlParserTest);
+    runReflectiveTests(HtmlTagInfoBuilderTest);
+    runReflectiveTests(HtmlUnitBuilderTest);
+    runReflectiveTests(HtmlWarningCodeTest);
+  }
   runReflectiveTests(ReferenceFinderTest);
   runReflectiveTests(SDKLibrariesReaderTest);
   runReflectiveTests(SourceFactoryTest);
@@ -466,6 +469,52 @@ abstract class AbstractScannerTest {
   }
 }
 
+/**
+ * Implementation of [ConstantEvaluationValidator] used during unit tests;
+ * verifies that any nodes referenced during constant evaluation are present in
+ * the dependency graph.
+ */
+class ConstantEvaluationValidator_ForTest
+    implements ConstantEvaluationValidator {
+  ConstantValueComputer computer;
+
+  ConstantEvaluationTarget _nodeBeingEvaluated;
+
+  @override
+  void beforeComputeValue(ConstantEvaluationTarget constant) {
+    _nodeBeingEvaluated = constant;
+  }
+
+  @override
+  void beforeGetConstantInitializers(ConstructorElement constructor) {
+    // Make sure we properly recorded the dependency.
+    expect(
+        computer.referenceGraph.containsPath(_nodeBeingEvaluated, constructor),
+        isTrue);
+  }
+
+  @override
+  void beforeGetEvaluationResult(ConstantEvaluationTarget constant) {
+    // Make sure we properly recorded the dependency.
+    expect(computer.referenceGraph.containsPath(_nodeBeingEvaluated, constant),
+        isTrue);
+  }
+
+  @override
+  void beforeGetFieldEvaluationResult(FieldElementImpl field) {
+    // Make sure we properly recorded the dependency.
+    expect(computer.referenceGraph.containsPath(_nodeBeingEvaluated, field),
+        isTrue);
+  }
+
+  @override
+  void beforeGetParameterDefault(ParameterElement parameter) {
+    // Make sure we properly recorded the dependency.
+    expect(computer.referenceGraph.containsPath(_nodeBeingEvaluated, parameter),
+        isTrue);
+  }
+}
+
 @reflectiveTest
 class ConstantEvaluatorTest extends ResolverTestCase {
   void fail_constructor() {
@@ -829,7 +878,7 @@ class ConstantEvaluatorTest extends ResolverTestCase {
 
   EvaluationResult _getExpressionValue(String contents) {
     Source source = addSource("var x = $contents;");
-    LibraryElement library = resolve(source);
+    LibraryElement library = resolve2(source);
     CompilationUnit unit =
         analysisContext.resolveCompilationUnit(source, library);
     expect(unit, isNotNull);
@@ -850,6 +899,16 @@ class ConstantEvaluatorTest extends ResolverTestCase {
 @reflectiveTest
 class ConstantFinderTest extends EngineTestCase {
   AstNode _node;
+  TypeProvider _typeProvider;
+  AnalysisContext _context;
+  Source _source;
+
+  void setUp() {
+    super.setUp();
+    _typeProvider = new TestTypeProvider();
+    _context = new TestAnalysisContext();
+    _source = new TestSource();
+  }
 
   /**
    * Test an annotation that consists solely of an identifier (and hence
@@ -872,72 +931,93 @@ class ConstantFinderTest extends EngineTestCase {
 
   void test_visitConstructorDeclaration_const() {
     ConstructorElement element = _setupConstructorDeclaration("A", true);
-    expect(_findConstantDeclarations()[element], same(_node));
+    expect(_findConstants(), contains(element));
   }
 
   void test_visitConstructorDeclaration_nonConst() {
     _setupConstructorDeclaration("A", false);
-    expect(_findConstantDeclarations().isEmpty, isTrue);
-  }
-
-  void test_visitInstanceCreationExpression_const() {
-    _setupInstanceCreationExpression("A", true);
-    expect(_findConstructorInvocations().contains(_node), isTrue);
-  }
-
-  void test_visitInstanceCreationExpression_nonConst() {
-    _setupInstanceCreationExpression("A", false);
-    expect(_findConstructorInvocations().isEmpty, isTrue);
+    expect(_findConstants(), isEmpty);
   }
 
   void test_visitVariableDeclaration_const() {
     VariableElement element = _setupVariableDeclaration("v", true, true);
-    expect(_findVariableDeclarations()[element], same(_node));
+    expect(_findConstants(), contains(element));
+  }
+
+  void test_visitVariableDeclaration_final_inClass() {
+    _setupFieldDeclaration('C', 'f', Keyword.FINAL);
+    expect(_findConstants(), isEmpty);
+  }
+
+  void test_visitVariableDeclaration_final_inClassWithConstConstructor() {
+    VariableDeclaration field = _setupFieldDeclaration('C', 'f', Keyword.FINAL,
+        hasConstConstructor: true);
+    expect(_findConstants(), contains(field.element));
+  }
+
+  void test_visitVariableDeclaration_final_outsideClass() {
+    _setupVariableDeclaration('v', false, true, isFinal: true);
+    expect(_findConstants(), isEmpty);
   }
 
   void test_visitVariableDeclaration_noInitializer() {
     _setupVariableDeclaration("v", true, false);
-    expect(_findVariableDeclarations().isEmpty, isTrue);
+    expect(_findConstants(), isEmpty);
   }
 
   void test_visitVariableDeclaration_nonConst() {
     _setupVariableDeclaration("v", false, true);
-    expect(_findVariableDeclarations().isEmpty, isTrue);
+    expect(_findConstants(), isEmpty);
+  }
+
+  void test_visitVariableDeclaration_static_const_inClass() {
+    VariableDeclaration field =
+        _setupFieldDeclaration('C', 'f', Keyword.CONST, isStatic: true);
+    expect(_findConstants(), contains(field.element));
+  }
+
+  void test_visitVariableDeclaration_static_const_inClassWithConstConstructor() {
+    VariableDeclaration field = _setupFieldDeclaration('C', 'f', Keyword.CONST,
+        isStatic: true, hasConstConstructor: true);
+    expect(_findConstants(), contains(field.element));
+  }
+
+  void test_visitVariableDeclaration_static_final_inClassWithConstConstructor() {
+    VariableDeclaration field = _setupFieldDeclaration('C', 'f', Keyword.FINAL,
+        isStatic: true, hasConstConstructor: true);
+    expect(_findConstants(), isNot(contains(field.element)));
+  }
+
+  void test_visitVariableDeclaration_uninitialized_final_inClassWithConstConstructor() {
+    VariableDeclaration field = _setupFieldDeclaration('C', 'f', Keyword.FINAL,
+        isInitialized: false, hasConstConstructor: true);
+    expect(_findConstants(), isNot(contains(field.element)));
+  }
+
+  void test_visitVariableDeclaration_uninitialized_static_const_inClass() {
+    _setupFieldDeclaration('C', 'f', Keyword.CONST,
+        isStatic: true, isInitialized: false);
+    expect(_findConstants(), isEmpty);
   }
 
   List<Annotation> _findAnnotations() {
-    ConstantFinder finder = new ConstantFinder();
-    _node.accept(finder);
-    List<Annotation> annotations = finder.annotations;
-    expect(annotations, isNotNull);
-    return annotations;
+    Set<Annotation> annotations = new Set<Annotation>();
+    for (ConstantEvaluationTarget target in _findConstants()) {
+      if (target is ConstantEvaluationTarget_Annotation) {
+        expect(target.context, same(_context));
+        expect(target.source, same(_source));
+        annotations.add(target.annotation);
+      }
+    }
+    return new List<Annotation>.from(annotations);
   }
 
-  Map<ConstructorElement, ConstructorDeclaration> _findConstantDeclarations() {
-    ConstantFinder finder = new ConstantFinder();
+  Set<ConstantEvaluationTarget> _findConstants() {
+    ConstantFinder finder = new ConstantFinder(_context, _source, _source);
     _node.accept(finder);
-    Map<ConstructorElement, ConstructorDeclaration> constructorMap =
-        finder.constructorMap;
-    expect(constructorMap, isNotNull);
-    return constructorMap;
-  }
-
-  List<InstanceCreationExpression> _findConstructorInvocations() {
-    ConstantFinder finder = new ConstantFinder();
-    _node.accept(finder);
-    List<InstanceCreationExpression> constructorInvocations =
-        finder.constructorInvocations;
-    expect(constructorInvocations, isNotNull);
-    return constructorInvocations;
-  }
-
-  Map<PotentiallyConstVariableElement, VariableDeclaration> _findVariableDeclarations() {
-    ConstantFinder finder = new ConstantFinder();
-    _node.accept(finder);
-    Map<PotentiallyConstVariableElement, VariableDeclaration> variableMap =
-        finder.variableMap;
-    expect(variableMap, isNotNull);
-    return variableMap;
+    Set<ConstantEvaluationTarget> constants = finder.constantsToCompute;
+    expect(constants, isNotNull);
+    return constants;
   }
 
   ConstructorElement _setupConstructorDeclaration(String name, bool isConst) {
@@ -954,22 +1034,51 @@ class ConstantFinderTest extends EngineTestCase {
     return element;
   }
 
-  void _setupInstanceCreationExpression(String name, bool isConst) {
-    _node = AstFactory.instanceCreationExpression2(
-        isConst ? Keyword.CONST : null,
-        AstFactory.typeName3(AstFactory.identifier3(name)));
+  VariableDeclaration _setupFieldDeclaration(
+      String className, String fieldName, Keyword keyword,
+      {bool isInitialized: true, bool isStatic: false,
+      bool hasConstConstructor: false}) {
+    VariableDeclaration variableDeclaration = isInitialized
+        ? AstFactory.variableDeclaration2(fieldName, AstFactory.integer(0))
+        : AstFactory.variableDeclaration(fieldName);
+    VariableElement fieldElement = ElementFactory.fieldElement(fieldName,
+        isStatic, keyword == Keyword.FINAL, keyword == Keyword.CONST,
+        _typeProvider.intType);
+    variableDeclaration.name.staticElement = fieldElement;
+    FieldDeclaration fieldDeclaration = AstFactory.fieldDeclaration2(
+        isStatic, keyword, <VariableDeclaration>[variableDeclaration]);
+    ClassDeclaration classDeclaration =
+        AstFactory.classDeclaration(null, className, null, null, null, null);
+    classDeclaration.members.add(fieldDeclaration);
+    _node = classDeclaration;
+    ClassElementImpl classElement = ElementFactory.classElement2(className);
+    classElement.fields = <FieldElement>[fieldElement];
+    classDeclaration.name.staticElement = classElement;
+    if (hasConstConstructor) {
+      ConstructorDeclaration constructorDeclaration = AstFactory
+          .constructorDeclaration2(Keyword.CONST, null,
+              AstFactory.identifier3(className), null,
+              AstFactory.formalParameterList(), null,
+              AstFactory.blockFunctionBody2());
+      classDeclaration.members.add(constructorDeclaration);
+      ConstructorElement constructorElement =
+          ElementFactory.constructorElement(classElement, '', true);
+      constructorDeclaration.element = constructorElement;
+      classElement.constructors = <ConstructorElement>[constructorElement];
+    }
+    return variableDeclaration;
   }
 
   VariableElement _setupVariableDeclaration(
-      String name, bool isConst, bool isInitialized) {
+      String name, bool isConst, bool isInitialized, {isFinal: false}) {
     VariableDeclaration variableDeclaration = isInitialized
         ? AstFactory.variableDeclaration2(name, AstFactory.integer(0))
         : AstFactory.variableDeclaration(name);
     SimpleIdentifier identifier = variableDeclaration.name;
     VariableElement element = ElementFactory.localVariableElement(identifier);
     identifier.staticElement = element;
-    AstFactory.variableDeclarationList2(
-        isConst ? Keyword.CONST : null, [variableDeclaration]);
+    Keyword keyword = isConst ? Keyword.CONST : isFinal ? Keyword.FINAL : null;
+    AstFactory.variableDeclarationList2(keyword, [variableDeclaration]);
     _node = variableDeclaration;
     return element;
   }
@@ -1157,13 +1266,13 @@ class C {
 const int a = c;
 const int b = a;
 const int c = b;''');
-    LibraryElement libraryElement = resolve(librarySource);
+    LibraryElement libraryElement = resolve2(librarySource);
     CompilationUnit unit =
         analysisContext.resolveCompilationUnit(librarySource, libraryElement);
     analysisContext.computeErrors(librarySource);
     expect(unit, isNotNull);
     ConstantValueComputer computer = _makeConstantValueComputer();
-    computer.add(unit);
+    computer.add(unit, librarySource, librarySource);
     computer.computeValues();
     NodeList<CompilationUnitMember> members = unit.declarations;
     expect(members, hasLength(3));
@@ -1176,12 +1285,12 @@ const int c = b;''');
     Source librarySource = addSource(r'''
 const int b = a;
 const int a = 0;''');
-    LibraryElement libraryElement = resolve(librarySource);
+    LibraryElement libraryElement = resolve2(librarySource);
     CompilationUnit unit =
         analysisContext.resolveCompilationUnit(librarySource, libraryElement);
     expect(unit, isNotNull);
     ConstantValueComputer computer = _makeConstantValueComputer();
-    computer.add(unit);
+    computer.add(unit, librarySource, librarySource);
     computer.computeValues();
     NodeList<CompilationUnitMember> members = unit.declarations;
     expect(members, hasLength(2));
@@ -1204,7 +1313,7 @@ const int a = 0;''');
 part of lib;
 const int b = a;
 const int d = c;''');
-    LibraryElement libraryElement = resolve(librarySource);
+    LibraryElement libraryElement = resolve2(librarySource);
     CompilationUnit libraryUnit =
         analysisContext.resolveCompilationUnit(librarySource, libraryElement);
     expect(libraryUnit, isNotNull);
@@ -1212,8 +1321,8 @@ const int d = c;''');
         analysisContext.resolveCompilationUnit(partSource, libraryElement);
     expect(partUnit, isNotNull);
     ConstantValueComputer computer = _makeConstantValueComputer();
-    computer.add(libraryUnit);
-    computer.add(partUnit);
+    computer.add(libraryUnit, librarySource, librarySource);
+    computer.add(partUnit, partSource, librarySource);
     computer.computeValues();
     NodeList<CompilationUnitMember> libraryMembers = libraryUnit.declarations;
     expect(libraryMembers, hasLength(2));
@@ -1229,16 +1338,33 @@ const int d = c;''');
 
   void test_computeValues_singleVariable() {
     Source librarySource = addSource("const int a = 0;");
-    LibraryElement libraryElement = resolve(librarySource);
+    LibraryElement libraryElement = resolve2(librarySource);
     CompilationUnit unit =
         analysisContext.resolveCompilationUnit(librarySource, libraryElement);
     expect(unit, isNotNull);
     ConstantValueComputer computer = _makeConstantValueComputer();
-    computer.add(unit);
+    computer.add(unit, librarySource, librarySource);
     computer.computeValues();
     NodeList<CompilationUnitMember> members = unit.declarations;
     expect(members, hasLength(1));
     _validate(true, (members[0] as TopLevelVariableDeclaration).variables);
+  }
+
+  void test_computeValues_value_depends_on_enum() {
+    Source librarySource = addSource('''
+enum E { id0, id1 }
+const E e = E.id0;
+''');
+    LibraryElement libraryElement = resolve2(librarySource);
+    CompilationUnit unit =
+        analysisContext.resolveCompilationUnit(librarySource, libraryElement);
+    expect(unit, isNotNull);
+    ConstantValueComputer computer = _makeConstantValueComputer();
+    computer.add(unit, librarySource, librarySource);
+    computer.computeValues();
+    TopLevelVariableDeclaration declaration = unit.declarations
+        .firstWhere((member) => member is TopLevelVariableDeclaration);
+    _validate(true, declaration.variables);
   }
 
   void test_dependencyOnConstructor() {
@@ -1345,6 +1471,30 @@ class B extends A {
 const B b = const B();''');
   }
 
+  void test_dependencyOnInitializedFinal() {
+    // a depends on A() depends on A.x
+    _assertProperDependencies('''
+class A {
+  const A();
+  final int x = 1;
+}
+const A a = const A();
+''');
+  }
+
+  void test_dependencyOnInitializedNonStaticConst() {
+    // Even though non-static consts are not allowed by the language, we need
+    // to handle them for error recovery purposes.
+    // a depends on A() depends on A.x
+    _assertProperDependencies('''
+class A {
+  const A();
+  const int x = 1;
+}
+const A a = const A();
+''', [CompileTimeErrorCode.CONST_INSTANCE_FIELD]);
+  }
+
   void test_dependencyOnNonFactoryRedirect() {
     // a depends on A.foo() depends on A.bar()
     _assertProperDependencies(r'''
@@ -1428,6 +1578,22 @@ const A a = const A();''');
     _assertProperDependencies(r'''
 const x = y + 1;
 const y = 2;''');
+  }
+
+  void test_final_initialized_at_declaration() {
+    CompilationUnit compilationUnit = resolveSource('''
+class A {
+  final int i = 123;
+  const A();
+}
+
+const A a = const A();
+''');
+    EvaluationResultImpl result =
+        _evaluateTopLevelVariable(compilationUnit, 'a');
+    Map<String, DartObjectImpl> fields = _assertType(result, "A");
+    expect(fields, hasLength(1));
+    _assertIntField(fields, "i", 123);
   }
 
   void test_fromEnvironment_bool_default_false() {
@@ -1533,7 +1699,7 @@ class A {
   final int k;
 }''');
     EvaluationResultImpl result =
-        _evaluateInstanceCreationExpression(compilationUnit, "foo");
+        _evaluateTopLevelVariable(compilationUnit, "foo");
     Map<String, DartObjectImpl> fields = _assertType(result, "A");
     expect(fields, hasLength(1));
     _assertIntField(fields, "k", 13);
@@ -1567,7 +1733,7 @@ class B {
   final int k;
 }''');
     EvaluationResultImpl result =
-        _evaluateInstanceCreationExpression(compilationUnit, "foo");
+        _evaluateTopLevelVariable(compilationUnit, "foo");
     Map<String, DartObjectImpl> fieldsOfA = _assertType(result, "A");
     expect(fieldsOfA, hasLength(1));
     Map<String, DartObjectImpl> fieldsOfB =
@@ -1587,7 +1753,7 @@ class B {
   static const bar = 4;
 }''');
     EvaluationResultImpl result =
-        _evaluateInstanceCreationExpression(compilationUnit, "foo");
+        _evaluateTopLevelVariable(compilationUnit, "foo");
     Map<String, DartObjectImpl> fields = _assertType(result, "A");
     expect(fields, hasLength(1));
     _assertIntField(fields, "k", 7);
@@ -1602,7 +1768,7 @@ class A {
   final int k;
 }''');
     EvaluationResultImpl result =
-        _evaluateInstanceCreationExpression(compilationUnit, "foo");
+        _evaluateTopLevelVariable(compilationUnit, "foo");
     Map<String, DartObjectImpl> fields = _assertType(result, "A");
     expect(fields, hasLength(1));
     _assertIntField(fields, "k", 7);
@@ -1620,7 +1786,7 @@ class B extends A {
   final int y;
 }''');
     EvaluationResultImpl result =
-        _evaluateInstanceCreationExpression(compilationUnit, "foo");
+        _evaluateTopLevelVariable(compilationUnit, "foo");
     Map<String, DartObjectImpl> fields = _assertType(result, "B");
     expect(fields, hasLength(2));
     _assertIntField(fields, "y", 5);
@@ -1638,7 +1804,7 @@ class A {
   const A(this.x)
 }''');
     EvaluationResultImpl result =
-        _evaluateInstanceCreationExpression(compilationUnit, "foo");
+        _evaluateTopLevelVariable(compilationUnit, "foo");
     Map<String, DartObjectImpl> fields = _assertType(result, "A");
     expect(fields, hasLength(1));
     _assertIntField(fields, "x", 42);
@@ -1672,7 +1838,7 @@ class B extends A {
   final int y;
 }''');
     EvaluationResultImpl result =
-        _evaluateInstanceCreationExpression(compilationUnit, "foo");
+        _evaluateTopLevelVariable(compilationUnit, "foo");
     Map<String, DartObjectImpl> fields = _assertType(result, "B");
     expect(fields, hasLength(2));
     _assertIntField(fields, "y", 4);
@@ -1690,8 +1856,8 @@ class A {
   const A.a2() : x = 5;
   final int x;
 }''');
-    Map<String, DartObjectImpl> aFields = _assertType(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"), "A");
+    Map<String, DartObjectImpl> aFields =
+        _assertType(_evaluateTopLevelVariable(compilationUnit, "foo"), "A");
     _assertIntField(aFields, 'x', 5);
   }
 
@@ -1703,8 +1869,8 @@ class A {
   const A.a2(x) : y = x + 10;
   final int y;
 }''');
-    Map<String, DartObjectImpl> aFields = _assertType(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"), "A");
+    Map<String, DartObjectImpl> aFields =
+        _assertType(_evaluateTopLevelVariable(compilationUnit, "foo"), "A");
     _assertIntField(aFields, 'y', 111);
   }
 
@@ -1718,8 +1884,7 @@ class A {
   const A() : this.b();
   const A.b() : this();
 }''');
-    _assertValidUnknown(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"));
+    _assertValidUnknown(_evaluateTopLevelVariable(compilationUnit, "foo"));
   }
 
   void test_instanceCreationExpression_nonFactoryRedirect_defaultArg() {
@@ -1730,8 +1895,8 @@ class A {
   const A.a2([x = 100]) : y = x + 10;
   final int y;
 }''');
-    Map<String, DartObjectImpl> aFields = _assertType(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"), "A");
+    Map<String, DartObjectImpl> aFields =
+        _assertType(_evaluateTopLevelVariable(compilationUnit, "foo"), "A");
     _assertIntField(aFields, 'y', 110);
   }
 
@@ -1744,8 +1909,7 @@ class A {
     // We don't care what value foo evaluates to (since there is a compile
     // error), but we shouldn't crash, and we should figure
     // out that it evaluates to an instance of class A.
-    _assertType(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"), "A");
+    _assertType(_evaluateTopLevelVariable(compilationUnit, "foo"), "A");
   }
 
   void test_instanceCreationExpression_nonFactoryRedirect_toNonConst() {
@@ -1758,8 +1922,7 @@ class A {
     // We don't care what value foo evaluates to (since there is a compile
     // error), but we shouldn't crash, and we should figure
     // out that it evaluates to an instance of class A.
-    _assertType(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"), "A");
+    _assertType(_evaluateTopLevelVariable(compilationUnit, "foo"), "A");
   }
 
   void test_instanceCreationExpression_nonFactoryRedirect_unnamed() {
@@ -1770,8 +1933,8 @@ class A {
   const A() : x = 5;
   final int x;
 }''');
-    Map<String, DartObjectImpl> aFields = _assertType(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"), "A");
+    Map<String, DartObjectImpl> aFields =
+        _assertType(_evaluateTopLevelVariable(compilationUnit, "foo"), "A");
     _assertIntField(aFields, 'x', 5);
   }
 
@@ -1784,8 +1947,7 @@ class A {
 class B implements A {
   const B();
 }''');
-    _assertType(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"), "B");
+    _assertType(_evaluateTopLevelVariable(compilationUnit, "foo"), "B");
   }
 
   void test_instanceCreationExpression_redirect_cycle() {
@@ -1798,8 +1960,7 @@ class A {
   const factory A() = A.b;
   const factory A.b() = A;
 }''');
-    _assertValidUnknown(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"));
+    _assertValidUnknown(_evaluateTopLevelVariable(compilationUnit, "foo"));
   }
 
   void test_instanceCreationExpression_redirect_extern() {
@@ -1808,8 +1969,7 @@ const foo = const A();
 class A {
   external const factory A();
 }''');
-    _assertValidUnknown(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"));
+    _assertValidUnknown(_evaluateTopLevelVariable(compilationUnit, "foo"));
   }
 
   void test_instanceCreationExpression_redirect_nonConst() {
@@ -1822,8 +1982,7 @@ class A {
   const factory A() = A.b;
   A.b();
 }''');
-    _assertValidUnknown(
-        _evaluateInstanceCreationExpression(compilationUnit, "foo"));
+    _assertValidUnknown(_evaluateTopLevelVariable(compilationUnit, "foo"));
   }
 
   void test_instanceCreationExpression_redirectWithTypeParams() {
@@ -1839,7 +1998,7 @@ class B<T> implements A {
 
 const A a = const A(10);''');
     EvaluationResultImpl result =
-        _evaluateInstanceCreationExpression(compilationUnit, "a");
+        _evaluateTopLevelVariable(compilationUnit, "a");
     Map<String, DartObjectImpl> fields = _assertType(result, "B<int>");
     expect(fields, hasLength(1));
     _assertIntField(fields, "x", 10);
@@ -1861,7 +2020,7 @@ class B<U> implements A {
 
 const A<int> a = const A<int>(10);''');
     EvaluationResultImpl result =
-        _evaluateInstanceCreationExpression(compilationUnit, "a");
+        _evaluateTopLevelVariable(compilationUnit, "a");
     Map<String, DartObjectImpl> fields = _assertType(result, "B<int>");
     expect(fields, hasLength(1));
     _assertIntField(fields, "x", 10);
@@ -1871,7 +2030,7 @@ const A<int> a = const A<int>(10);''');
     CompilationUnit compilationUnit =
         resolveSource("const foo = const Symbol('a');");
     EvaluationResultImpl evaluationResult =
-        _evaluateInstanceCreationExpression(compilationUnit, "foo");
+        _evaluateTopLevelVariable(compilationUnit, "foo");
     expect(evaluationResult.value, isNotNull);
     DartObjectImpl value = evaluationResult.value;
     expect(value.type, typeProvider.symbolType);
@@ -1894,41 +2053,87 @@ class C<E> {
 const c_int = const C<int>();
 const c_num = const C<num>();''');
     EvaluationResultImpl c_int =
-        _evaluateInstanceCreationExpression(compilationUnit, "c_int");
+        _evaluateTopLevelVariable(compilationUnit, "c_int");
     _assertType(c_int, "C<int>");
     DartObjectImpl c_int_value = c_int.value;
     EvaluationResultImpl c_num =
-        _evaluateInstanceCreationExpression(compilationUnit, "c_num");
+        _evaluateTopLevelVariable(compilationUnit, "c_num");
     _assertType(c_num, "C<num>");
     DartObjectImpl c_num_value = c_num.value;
     expect(c_int_value == c_num_value, isFalse);
   }
 
   void test_isValidSymbol() {
-    expect(ConstantValueComputer.isValidPublicSymbol(""), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo"), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo.bar"), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo\$"), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo\$bar"), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("iff"), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("gif"), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("if\$"), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("\$if"), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo="), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo.bar="), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo.+"), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("void"), isTrue);
-    expect(ConstantValueComputer.isValidPublicSymbol("_foo"), isFalse);
-    expect(ConstantValueComputer.isValidPublicSymbol("_foo.bar"), isFalse);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo._bar"), isFalse);
-    expect(ConstantValueComputer.isValidPublicSymbol("if"), isFalse);
-    expect(ConstantValueComputer.isValidPublicSymbol("if.foo"), isFalse);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo.if"), isFalse);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo=.bar"), isFalse);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo."), isFalse);
-    expect(ConstantValueComputer.isValidPublicSymbol("+.foo"), isFalse);
-    expect(ConstantValueComputer.isValidPublicSymbol("void.foo"), isFalse);
-    expect(ConstantValueComputer.isValidPublicSymbol("foo.void"), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol(""), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo"), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo.bar"), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo\$"), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo\$bar"), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("iff"), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("gif"), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("if\$"), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("\$if"), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo="), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo.bar="), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo.+"), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("void"), isTrue);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("_foo"), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("_foo.bar"), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo._bar"), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("if"), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("if.foo"), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo.if"), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo=.bar"), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo."), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("+.foo"), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("void.foo"), isFalse);
+    expect(ConstantEvaluationEngine.isValidPublicSymbol("foo.void"), isFalse);
+  }
+
+  void test_length_of_improperly_typed_string_expression() {
+    // Since type annotations are ignored in unchecked mode, the improper
+    // types on s1 and s2 shouldn't prevent us from evaluating i to
+    // 'alpha'.length.
+    CompilationUnit compilationUnit = resolveSource('''
+const int s1 = 'alpha';
+const int s2 = 'beta';
+const int i = (true ? s1 : s2).length;
+''');
+    ConstTopLevelVariableElementImpl element =
+        findTopLevelDeclaration(compilationUnit, 'i').element;
+    EvaluationResultImpl result = element.evaluationResult;
+    expect(_assertValidInt(result), 5);
+  }
+
+  void test_length_of_improperly_typed_string_identifier() {
+    // Since type annotations are ignored in unchecked mode, the improper type
+    // on s shouldn't prevent us from evaluating i to 'alpha'.length.
+    CompilationUnit compilationUnit = resolveSource('''
+const int s = 'alpha';
+const int i = s.length;
+''');
+    ConstTopLevelVariableElementImpl element =
+        findTopLevelDeclaration(compilationUnit, 'i').element;
+    EvaluationResultImpl result = element.evaluationResult;
+    expect(_assertValidInt(result), 5);
+  }
+
+  void test_non_static_const_initialized_at_declaration() {
+    // Even though non-static consts are not allowed by the language, we need
+    // to handle them for error recovery purposes.
+    CompilationUnit compilationUnit = resolveSource('''
+class A {
+  const int i = 123;
+  const A();
+}
+
+const A a = const A();
+''');
+    EvaluationResultImpl result =
+        _evaluateTopLevelVariable(compilationUnit, 'a');
+    Map<String, DartObjectImpl> fields = _assertType(result, "A");
+    expect(fields, hasLength(1));
+    _assertIntField(fields, "i", 123);
   }
 
   void test_symbolLiteral_void() {
@@ -1966,12 +2171,12 @@ const c_num = const C<num>();''');
   void _assertProperDependencies(String sourceText,
       [List<ErrorCode> expectedErrorCodes = ErrorCode.EMPTY_LIST]) {
     Source source = addSource(sourceText);
-    LibraryElement element = resolve(source);
+    LibraryElement element = resolve2(source);
     CompilationUnit unit =
         analysisContext.resolveCompilationUnit(source, element);
     expect(unit, isNotNull);
     ConstantValueComputer computer = _makeConstantValueComputer();
-    computer.add(unit);
+    computer.add(unit, source, source);
     computer.computeValues();
     assertErrors(source, expectedErrorCodes);
   }
@@ -2030,7 +2235,7 @@ const c_num = const C<num>();''');
         defaultExpr == null ? "" : ", defaultValue: $defaultExpr";
     CompilationUnit compilationUnit = resolveSource(
         "const $varName = const bool.fromEnvironment('$envVarName'$defaultArg);");
-    return _evaluateInstanceCreationExpression(compilationUnit, varName);
+    return _evaluateTopLevelVariable(compilationUnit, varName);
   }
 
   EvaluationResultImpl _check_fromEnvironment_int(
@@ -2044,7 +2249,7 @@ const c_num = const C<num>();''');
         defaultExpr == null ? "" : ", defaultValue: $defaultExpr";
     CompilationUnit compilationUnit = resolveSource(
         "const $varName = const int.fromEnvironment('$envVarName'$defaultArg);");
-    return _evaluateInstanceCreationExpression(compilationUnit, varName);
+    return _evaluateTopLevelVariable(compilationUnit, varName);
   }
 
   EvaluationResultImpl _check_fromEnvironment_string(
@@ -2058,7 +2263,7 @@ const c_num = const C<num>();''');
         defaultExpr == null ? "" : ", defaultValue: $defaultExpr";
     CompilationUnit compilationUnit = resolveSource(
         "const $varName = const String.fromEnvironment('$envVarName'$defaultArg);");
-    return _evaluateInstanceCreationExpression(compilationUnit, varName);
+    return _evaluateTopLevelVariable(compilationUnit, varName);
   }
 
   void _checkInstanceCreation_withSupertypeParams(bool isExplicit) {
@@ -2076,12 +2281,12 @@ class C<T, U> extends A<U> {
 const b_int_num = const B<int, num>();
 const c_int_num = const C<int, num>();""");
     EvaluationResultImpl b_int_num =
-        _evaluateInstanceCreationExpression(compilationUnit, "b_int_num");
+        _evaluateTopLevelVariable(compilationUnit, "b_int_num");
     Map<String, DartObjectImpl> b_int_num_fields =
         _assertType(b_int_num, "B<int, num>");
     _assertFieldType(b_int_num_fields, GenericState.SUPERCLASS_FIELD, "A<int>");
     EvaluationResultImpl c_int_num =
-        _evaluateInstanceCreationExpression(compilationUnit, "c_int_num");
+        _evaluateTopLevelVariable(compilationUnit, "c_int_num");
     Map<String, DartObjectImpl> c_int_num_fields =
         _assertType(c_int_num, "C<int, num>");
     _assertFieldType(c_int_num_fields, GenericState.SUPERCLASS_FIELD, "A<num>");
@@ -2100,8 +2305,7 @@ class A {
   const A(${isNamed ? "{$formalParam}" : "[$formalParam]"})${isFieldFormal ? "" : " : $fieldName = $paramName"};
   final int $fieldName;
 }""");
-    EvaluationResultImpl x =
-        _evaluateInstanceCreationExpression(compilationUnit, "x");
+    EvaluationResultImpl x = _evaluateTopLevelVariable(compilationUnit, "x");
     Map<String, DartObjectImpl> fieldsOfX = _assertType(x, "A");
     expect(fieldsOfX, hasLength(1));
     if (hasDefault) {
@@ -2109,8 +2313,7 @@ class A {
     } else {
       _assertNullField(fieldsOfX, fieldName);
     }
-    EvaluationResultImpl y =
-        _evaluateInstanceCreationExpression(compilationUnit, "y");
+    EvaluationResultImpl y = _evaluateTopLevelVariable(compilationUnit, "y");
     Map<String, DartObjectImpl> fieldsOfY = _assertType(y, "A");
     expect(fieldsOfY, hasLength(1));
     _assertIntField(fieldsOfY, fieldName, 10);
@@ -2140,16 +2343,21 @@ class A {
     return null;
   }
 
-  EvaluationResultImpl _evaluateInstanceCreationExpression(
+  EvaluationResultImpl _evaluateTopLevelVariable(
       CompilationUnit compilationUnit, String name) {
-    Expression expression =
-        findTopLevelConstantExpression(compilationUnit, name);
-    return (expression as InstanceCreationExpression).evaluationResult;
+    VariableDeclaration varDecl =
+        findTopLevelDeclaration(compilationUnit, name);
+    ConstTopLevelVariableElementImpl varElement = varDecl.element;
+    return varElement.evaluationResult;
   }
 
   ConstantValueComputer _makeConstantValueComputer() {
-    return new ValidatingConstantValueComputer(
-        analysisContext2.typeProvider, analysisContext2.declaredVariables);
+    ConstantEvaluationValidator_ForTest validator =
+        new ConstantEvaluationValidator_ForTest();
+    validator.computer = new ConstantValueComputer(analysisContext2,
+        analysisContext2.typeProvider, analysisContext2.declaredVariables,
+        validator);
+    return validator.computer;
   }
 
   void _validate(bool shouldBeValid, VariableDeclarationList declarationList) {
@@ -2166,27 +2374,6 @@ class A {
   }
 }
 
-class ConstantValueComputerTest_ValidatingConstantVisitor
-    extends ConstantVisitor {
-  final DirectedGraph<AstNode> _referenceGraph;
-  final AstNode _nodeBeingEvaluated;
-
-  ConstantValueComputerTest_ValidatingConstantVisitor(TypeProvider typeProvider,
-      this._referenceGraph, this._nodeBeingEvaluated,
-      ErrorReporter errorReporter)
-      : super.con1(typeProvider, errorReporter);
-
-  @override
-  void beforeGetEvaluationResult(AstNode node) {
-    super.beforeGetEvaluationResult(node);
-    // If we are getting the evaluation result for a node in the graph,
-    // make sure we properly recorded the dependency.
-    if (_referenceGraph.nodes.contains(node)) {
-      expect(_referenceGraph.containsPath(_nodeBeingEvaluated, node), isTrue);
-    }
-  }
-}
-
 @reflectiveTest
 class ConstantVisitorTest extends ResolverTestCase {
   void test_visitConditionalExpression_false() {
@@ -2197,32 +2384,10 @@ class ConstantVisitorTest extends ResolverTestCase {
     GatheringErrorListener errorListener = new GatheringErrorListener();
     ErrorReporter errorReporter =
         new ErrorReporter(errorListener, _dummySource());
-    _assertValue(0, expression.accept(
-        new ConstantVisitor.con1(new TestTypeProvider(), errorReporter)));
+    _assertValue(0, expression.accept(new ConstantVisitor(
+        new ConstantEvaluationEngine(
+            new TestTypeProvider(), new DeclaredVariables()), errorReporter)));
     errorListener.assertNoErrors();
-  }
-
-  void test_visitConditionalExpression_instanceCreation_invalidFieldInitializer() {
-    TestTypeProvider typeProvider = new TestTypeProvider();
-    LibraryElementImpl libraryElement = ElementFactory.library(null, "lib");
-    String className = "C";
-    ClassElementImpl classElement = ElementFactory.classElement2(className);
-    (libraryElement.definingCompilationUnit as CompilationUnitElementImpl).types =
-        <ClassElement>[classElement];
-    ConstructorElementImpl constructorElement = ElementFactory
-        .constructorElement(classElement, null, true, [typeProvider.intType]);
-    constructorElement.parameters[0] =
-        new FieldFormalParameterElementImpl(AstFactory.identifier3("x"));
-    InstanceCreationExpression expression = AstFactory
-        .instanceCreationExpression2(Keyword.CONST,
-            AstFactory.typeName4(className), [AstFactory.integer(0)]);
-    expression.staticElement = constructorElement;
-    GatheringErrorListener errorListener = new GatheringErrorListener();
-    ErrorReporter errorReporter =
-        new ErrorReporter(errorListener, _dummySource());
-    expression.accept(new ConstantVisitor.con1(typeProvider, errorReporter));
-    errorListener
-        .assertErrorsWithCodes([CompileTimeErrorCode.INVALID_CONSTANT]);
   }
 
   void test_visitConditionalExpression_nonBooleanCondition() {
@@ -2234,8 +2399,9 @@ class ConstantVisitorTest extends ResolverTestCase {
     GatheringErrorListener errorListener = new GatheringErrorListener();
     ErrorReporter errorReporter =
         new ErrorReporter(errorListener, _dummySource());
-    DartObjectImpl result = expression.accept(
-        new ConstantVisitor.con1(new TestTypeProvider(), errorReporter));
+    DartObjectImpl result = expression.accept(new ConstantVisitor(
+        new ConstantEvaluationEngine(
+            new TestTypeProvider(), new DeclaredVariables()), errorReporter));
     expect(result, isNull);
     errorListener
         .assertErrorsWithCodes([CompileTimeErrorCode.CONST_EVAL_TYPE_BOOL]);
@@ -2249,8 +2415,9 @@ class ConstantVisitorTest extends ResolverTestCase {
     GatheringErrorListener errorListener = new GatheringErrorListener();
     ErrorReporter errorReporter =
         new ErrorReporter(errorListener, _dummySource());
-    DartObjectImpl result = expression.accept(
-        new ConstantVisitor.con1(new TestTypeProvider(), errorReporter));
+    DartObjectImpl result = expression.accept(new ConstantVisitor(
+        new ConstantEvaluationEngine(
+            new TestTypeProvider(), new DeclaredVariables()), errorReporter));
     expect(result, isNull);
     errorListener
         .assertErrorsWithCodes([CompileTimeErrorCode.INVALID_CONSTANT]);
@@ -2264,8 +2431,9 @@ class ConstantVisitorTest extends ResolverTestCase {
     GatheringErrorListener errorListener = new GatheringErrorListener();
     ErrorReporter errorReporter =
         new ErrorReporter(errorListener, _dummySource());
-    DartObjectImpl result = expression.accept(
-        new ConstantVisitor.con1(new TestTypeProvider(), errorReporter));
+    DartObjectImpl result = expression.accept(new ConstantVisitor(
+        new ConstantEvaluationEngine(
+            new TestTypeProvider(), new DeclaredVariables()), errorReporter));
     expect(result, isNull);
     errorListener
         .assertErrorsWithCodes([CompileTimeErrorCode.INVALID_CONSTANT]);
@@ -2279,8 +2447,9 @@ class ConstantVisitorTest extends ResolverTestCase {
     GatheringErrorListener errorListener = new GatheringErrorListener();
     ErrorReporter errorReporter =
         new ErrorReporter(errorListener, _dummySource());
-    _assertValue(1, expression.accept(
-        new ConstantVisitor.con1(new TestTypeProvider(), errorReporter)));
+    _assertValue(1, expression.accept(new ConstantVisitor(
+        new ConstantEvaluationEngine(
+            new TestTypeProvider(), new DeclaredVariables()), errorReporter)));
     errorListener.assertNoErrors();
   }
 
@@ -2340,7 +2509,8 @@ const b = 3;''');
   }
 
   NonExistingSource _dummySource() {
-    return new NonExistingSource("foo.dart", UriKind.FILE_URI);
+    String path = '/test.dart';
+    return new NonExistingSource(path, toUri(path), UriKind.FILE_URI);
   }
 
   DartObjectImpl _evaluateConstant(CompilationUnit compilationUnit, String name,
@@ -2350,8 +2520,9 @@ const b = 3;''');
         findTopLevelConstantExpression(compilationUnit, name);
     GatheringErrorListener errorListener = new GatheringErrorListener();
     ErrorReporter errorReporter = new ErrorReporter(errorListener, source);
-    DartObjectImpl result = expression.accept(new ConstantVisitor.con2(
-        typeProvider, lexicalEnvironment, errorReporter));
+    DartObjectImpl result = expression.accept(new ConstantVisitor(
+        new ConstantEvaluationEngine(typeProvider, new DeclaredVariables()),
+        errorReporter, lexicalEnvironment: lexicalEnvironment));
     errorListener.assertNoErrors();
     return result;
   }
@@ -4763,9 +4934,9 @@ class DirectoryBasedSourceContainerTest {
     JavaFile file2 =
         FileUtilities2.createFile("/does/not/exist/folder/some2.dart");
     JavaFile file3 = FileUtilities2.createFile("/does/not/exist3/some3.dart");
-    FileBasedSource source1 = new FileBasedSource.con1(file1);
-    FileBasedSource source2 = new FileBasedSource.con1(file2);
-    FileBasedSource source3 = new FileBasedSource.con1(file3);
+    FileBasedSource source1 = new FileBasedSource(file1);
+    FileBasedSource source2 = new FileBasedSource(file2);
+    FileBasedSource source3 = new FileBasedSource(file3);
     DirectoryBasedSourceContainer container =
         new DirectoryBasedSourceContainer.con1(dir);
     expect(container.contains(source1), isTrue);
@@ -4817,6 +4988,7 @@ class ElementBuilderTest extends EngineTestCase {
     List<TypeParameterElement> typeParameters = type.typeParameters;
     expect(typeParameters, hasLength(0));
     expect(type.isAbstract, isTrue);
+    expect(type.isMixinApplication, isFalse);
     expect(type.isSynthetic, isFalse);
   }
 
@@ -4835,6 +5007,7 @@ class ElementBuilderTest extends EngineTestCase {
     List<TypeParameterElement> typeParameters = type.typeParameters;
     expect(typeParameters, hasLength(0));
     expect(type.isAbstract, isFalse);
+    expect(type.isMixinApplication, isFalse);
     expect(type.isSynthetic, isFalse);
   }
 
@@ -4859,6 +5032,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(typeParameters[0].name, firstVariableName);
     expect(typeParameters[1].name, secondVariableName);
     expect(type.isAbstract, isFalse);
+    expect(type.isMixinApplication, isFalse);
     expect(type.isSynthetic, isFalse);
   }
 
@@ -4885,6 +5059,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(type, isNotNull);
     expect(type.name, className);
     expect(type.isAbstract, isFalse);
+    expect(type.isMixinApplication, isFalse);
     expect(type.isSynthetic, isFalse);
     List<TypeParameterElement> typeParameters = type.typeParameters;
     expect(typeParameters, hasLength(1));
@@ -4926,6 +5101,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(alias.element, same(type));
     expect(type.name, equals('C'));
     expect(type.isAbstract, isFalse);
+    expect(type.isMixinApplication, isTrue);
     expect(type.isSynthetic, isFalse);
     expect(type.typeParameters, isEmpty);
     expect(type.fields, isEmpty);
@@ -4953,6 +5129,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(types, hasLength(1));
     ClassElement type = types[0];
     expect(type.isAbstract, isTrue);
+    expect(type.isMixinApplication, isTrue);
   }
 
   void test_visitClassTypeAlias_typeParams() {
@@ -4980,6 +5157,30 @@ class ElementBuilderTest extends EngineTestCase {
     expect(type.typeParameters[0].name, equals('T'));
   }
 
+  void test_visitConstructorDeclaration_external() {
+    ElementHolder holder = new ElementHolder();
+    ElementBuilder builder = new ElementBuilder(holder);
+    String className = "A";
+    ConstructorDeclaration constructorDeclaration = AstFactory
+        .constructorDeclaration2(null, null, AstFactory.identifier3(className),
+            null, AstFactory.formalParameterList(), null,
+            AstFactory.blockFunctionBody2());
+    constructorDeclaration.externalKeyword =
+        TokenFactory.tokenFromKeyword(Keyword.EXTERNAL);
+    constructorDeclaration.accept(builder);
+    List<ConstructorElement> constructors = holder.constructors;
+    expect(constructors, hasLength(1));
+    ConstructorElement constructor = constructors[0];
+    expect(constructor, isNotNull);
+    expect(constructor.isExternal, isTrue);
+    expect(constructor.isFactory, isFalse);
+    expect(constructor.name, "");
+    expect(constructor.functions, hasLength(0));
+    expect(constructor.labels, hasLength(0));
+    expect(constructor.localVariables, hasLength(0));
+    expect(constructor.parameters, hasLength(0));
+  }
+
   void test_visitConstructorDeclaration_factory() {
     ElementHolder holder = new ElementHolder();
     ElementBuilder builder = new ElementBuilder(holder);
@@ -4994,6 +5195,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(constructors, hasLength(1));
     ConstructorElement constructor = constructors[0];
     expect(constructor, isNotNull);
+    expect(constructor.isExternal, isFalse);
     expect(constructor.isFactory, isTrue);
     expect(constructor.name, "");
     expect(constructor.functions, hasLength(0));
@@ -5015,6 +5217,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(constructors, hasLength(1));
     ConstructorElement constructor = constructors[0];
     expect(constructor, isNotNull);
+    expect(constructor.isExternal, isFalse);
     expect(constructor.isFactory, isFalse);
     expect(constructor.name, "");
     expect(constructor.functions, hasLength(0));
@@ -5037,6 +5240,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(constructors, hasLength(1));
     ConstructorElement constructor = constructors[0];
     expect(constructor, isNotNull);
+    expect(constructor.isExternal, isFalse);
     expect(constructor.isFactory, isFalse);
     expect(constructor.name, constructorName);
     expect(constructor.functions, hasLength(0));
@@ -5060,6 +5264,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(constructors, hasLength(1));
     ConstructorElement constructor = constructors[0];
     expect(constructor, isNotNull);
+    expect(constructor.isExternal, isFalse);
     expect(constructor.isFactory, isFalse);
     expect(constructor.name, "");
     expect(constructor.functions, hasLength(0));
@@ -5169,6 +5374,27 @@ class ElementBuilderTest extends EngineTestCase {
     expect(parameters[1].name, secondParameterName);
   }
 
+  void test_visitFunctionDeclaration_external() {
+    ElementHolder holder = new ElementHolder();
+    ElementBuilder builder = new ElementBuilder(holder);
+    String functionName = "f";
+    FunctionDeclaration declaration = AstFactory.functionDeclaration(null, null,
+        functionName, AstFactory.functionExpression2(
+            AstFactory.formalParameterList(), AstFactory.blockFunctionBody2()));
+    declaration.externalKeyword =
+        TokenFactory.tokenFromKeyword(Keyword.EXTERNAL);
+    declaration.accept(builder);
+    List<FunctionElement> functions = holder.functions;
+    expect(functions, hasLength(1));
+    FunctionElement function = functions[0];
+    expect(function, isNotNull);
+    expect(function.name, functionName);
+    expect(declaration.element, same(function));
+    expect(declaration.functionExpression.element, same(function));
+    expect(function.isExternal, isTrue);
+    expect(function.isSynthetic, isFalse);
+  }
+
   void test_visitFunctionDeclaration_getter() {
     ElementHolder holder = new ElementHolder();
     ElementBuilder builder = new ElementBuilder(holder);
@@ -5185,6 +5411,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(declaration.element, same(accessor));
     expect(declaration.functionExpression.element, same(accessor));
     expect(accessor.isGetter, isTrue);
+    expect(accessor.isExternal, isFalse);
     expect(accessor.isSetter, isFalse);
     expect(accessor.isSynthetic, isFalse);
     PropertyInducingElement variable = accessor.variable;
@@ -5208,6 +5435,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(function.name, functionName);
     expect(declaration.element, same(function));
     expect(declaration.functionExpression.element, same(function));
+    expect(function.isExternal, isFalse);
     expect(function.isSynthetic, isFalse);
   }
 
@@ -5227,6 +5455,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(declaration.element, same(accessor));
     expect(declaration.functionExpression.element, same(accessor));
     expect(accessor.isGetter, isFalse);
+    expect(accessor.isExternal, isFalse);
     expect(accessor.isSetter, isTrue);
     expect(accessor.isSynthetic, isFalse);
     PropertyInducingElement variable = accessor.variable;
@@ -5328,6 +5557,32 @@ class ElementBuilderTest extends EngineTestCase {
     expect(method.localVariables, hasLength(0));
     expect(method.parameters, hasLength(0));
     expect(method.isAbstract, isTrue);
+    expect(method.isExternal, isFalse);
+    expect(method.isStatic, isFalse);
+    expect(method.isSynthetic, isFalse);
+  }
+
+  void test_visitMethodDeclaration_external() {
+    ElementHolder holder = new ElementHolder();
+    ElementBuilder builder = new ElementBuilder(holder);
+    String methodName = "m";
+    MethodDeclaration methodDeclaration = AstFactory.methodDeclaration2(null,
+        null, null, null, AstFactory.identifier3(methodName),
+        AstFactory.formalParameterList(), AstFactory.emptyFunctionBody());
+    methodDeclaration.externalKeyword =
+        TokenFactory.tokenFromKeyword(Keyword.EXTERNAL);
+    methodDeclaration.accept(builder);
+    List<MethodElement> methods = holder.methods;
+    expect(methods, hasLength(1));
+    MethodElement method = methods[0];
+    expect(method, isNotNull);
+    expect(method.name, methodName);
+    expect(method.functions, hasLength(0));
+    expect(method.labels, hasLength(0));
+    expect(method.localVariables, hasLength(0));
+    expect(method.parameters, hasLength(0));
+    expect(method.isAbstract, isFalse);
+    expect(method.isExternal, isTrue);
     expect(method.isStatic, isFalse);
     expect(method.isSynthetic, isFalse);
   }
@@ -5350,6 +5605,7 @@ class ElementBuilderTest extends EngineTestCase {
     PropertyAccessorElement getter = field.getter;
     expect(getter, isNotNull);
     expect(getter.isAbstract, isFalse);
+    expect(getter.isExternal, isFalse);
     expect(getter.isGetter, isTrue);
     expect(getter.isSynthetic, isFalse);
     expect(getter.name, methodName);
@@ -5378,6 +5634,7 @@ class ElementBuilderTest extends EngineTestCase {
     PropertyAccessorElement getter = field.getter;
     expect(getter, isNotNull);
     expect(getter.isAbstract, isTrue);
+    expect(getter.isExternal, isFalse);
     expect(getter.isGetter, isTrue);
     expect(getter.isSynthetic, isFalse);
     expect(getter.name, methodName);
@@ -5395,6 +5652,8 @@ class ElementBuilderTest extends EngineTestCase {
     MethodDeclaration methodDeclaration = AstFactory.methodDeclaration(null,
         null, Keyword.GET, null, AstFactory.identifier3(methodName),
         AstFactory.formalParameterList());
+    methodDeclaration.externalKeyword =
+        TokenFactory.tokenFromKeyword(Keyword.EXTERNAL);
     methodDeclaration.accept(builder);
     List<FieldElement> fields = holder.fields;
     expect(fields, hasLength(1));
@@ -5406,6 +5665,7 @@ class ElementBuilderTest extends EngineTestCase {
     PropertyAccessorElement getter = field.getter;
     expect(getter, isNotNull);
     expect(getter.isAbstract, isFalse);
+    expect(getter.isExternal, isTrue);
     expect(getter.isGetter, isTrue);
     expect(getter.isSynthetic, isFalse);
     expect(getter.name, methodName);
@@ -5434,6 +5694,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(method.localVariables, hasLength(0));
     expect(method.parameters, hasLength(0));
     expect(method.isAbstract, isFalse);
+    expect(method.isExternal, isFalse);
     expect(method.isStatic, isFalse);
     expect(method.isSynthetic, isFalse);
   }
@@ -5458,6 +5719,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(method.localVariables, hasLength(0));
     expect(method.parameters, hasLength(1));
     expect(method.isAbstract, isFalse);
+    expect(method.isExternal, isFalse);
     expect(method.isStatic, isFalse);
     expect(method.isSynthetic, isFalse);
   }
@@ -5480,6 +5742,7 @@ class ElementBuilderTest extends EngineTestCase {
     PropertyAccessorElement setter = field.setter;
     expect(setter, isNotNull);
     expect(setter.isAbstract, isFalse);
+    expect(setter.isExternal, isFalse);
     expect(setter.isSetter, isTrue);
     expect(setter.isSynthetic, isFalse);
     expect(setter.name, "$methodName=");
@@ -5509,6 +5772,7 @@ class ElementBuilderTest extends EngineTestCase {
     PropertyAccessorElement setter = field.setter;
     expect(setter, isNotNull);
     expect(setter.isAbstract, isTrue);
+    expect(setter.isExternal, isFalse);
     expect(setter.isSetter, isTrue);
     expect(setter.isSynthetic, isFalse);
     expect(setter.name, "$methodName=");
@@ -5527,6 +5791,8 @@ class ElementBuilderTest extends EngineTestCase {
     MethodDeclaration methodDeclaration = AstFactory.methodDeclaration(null,
         null, Keyword.SET, null, AstFactory.identifier3(methodName),
         AstFactory.formalParameterList());
+    methodDeclaration.externalKeyword =
+        TokenFactory.tokenFromKeyword(Keyword.EXTERNAL);
     methodDeclaration.accept(builder);
     List<FieldElement> fields = holder.fields;
     expect(fields, hasLength(1));
@@ -5538,6 +5804,7 @@ class ElementBuilderTest extends EngineTestCase {
     PropertyAccessorElement setter = field.setter;
     expect(setter, isNotNull);
     expect(setter.isAbstract, isFalse);
+    expect(setter.isExternal, isTrue);
     expect(setter.isSetter, isTrue);
     expect(setter.isSynthetic, isFalse);
     expect(setter.name, "$methodName=");
@@ -5567,6 +5834,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(method.localVariables, hasLength(0));
     expect(method.parameters, hasLength(0));
     expect(method.isAbstract, isFalse);
+    expect(method.isExternal, isFalse);
     expect(method.isStatic, isTrue);
     expect(method.isSynthetic, isFalse);
   }
@@ -5598,6 +5866,7 @@ class ElementBuilderTest extends EngineTestCase {
     expect(method, isNotNull);
     expect(method.name, methodName);
     expect(method.isAbstract, isFalse);
+    expect(method.isExternal, isFalse);
     expect(method.isStatic, isFalse);
     expect(method.isSynthetic, isFalse);
     List<VariableElement> parameters = method.parameters;
@@ -6182,7 +6451,7 @@ void main() {
 }''';
     CompilationUnit cu = _resolveContents(code);
     int offset = code.indexOf('foo(0)');
-    AstNode node = new NodeLocator.con1(offset).searchWithin(cu);
+    AstNode node = new NodeLocator(offset).searchWithin(cu);
     MethodInvocation invocation =
         node.getAncestor((n) => n is MethodInvocation);
     Element element = ElementLocator.locate(invocation);
@@ -6292,7 +6561,7 @@ core.int value;''');
     CompilationUnit cu = _resolveContents(code);
     int start = _getOffsetOfMatch(code, nodePattern, index);
     int end = start + nodePattern.length;
-    return new NodeLocator.con2(start, end).searchWithin(cu);
+    return new NodeLocator(start, end).searchWithin(cu);
   }
 
   int _getOffsetOfMatch(String contents, String pattern, int matchIndex) {
@@ -6324,7 +6593,7 @@ core.int value;''');
    */
   CompilationUnit _resolveContents(String code) {
     Source source = addSource(code);
-    LibraryElement library = resolve(source);
+    LibraryElement library = resolve2(source);
     assertNoErrors(source);
     verify([source]);
     return analysisContext.resolveCompilationUnit(source, library);
@@ -6456,8 +6725,8 @@ class ErrorReporterTest extends EngineTestCase {
     ImportElementImpl element =
         ElementFactory.importFor(ElementFactory.library(null, ''), null);
     GatheringErrorListener listener = new GatheringErrorListener();
-    ErrorReporter reporter = new ErrorReporter(
-        listener, new NonExistingSource("/test.dart", UriKind.FILE_URI));
+    ErrorReporter reporter = new ErrorReporter(listener, new NonExistingSource(
+        '/test.dart', toUri('/test.dart'), UriKind.FILE_URI));
     reporter.reportErrorForElement(
         StaticWarningCode.CONFLICTING_INSTANCE_GETTER_AND_SUPERCLASS_MEMBER,
         element, ['A']);
@@ -7063,7 +7332,7 @@ String f(E e) {
   return x;
 }
 ''');
-    LibraryElement element = resolve(source);
+    LibraryElement element = resolve2(source);
     CompilationUnit unit = resolveCompilationUnit(source, element);
     FunctionDeclaration function = unit.declarations.last;
     BlockFunctionBody body = function.functionExpression.body;
@@ -7085,7 +7354,7 @@ String f(E e) {
   return x;
 }
 ''');
-    LibraryElement element = resolve(source);
+    LibraryElement element = resolve2(source);
     CompilationUnit unit = resolveCompilationUnit(source, element);
     FunctionDeclaration function = unit.declarations.last;
     BlockFunctionBody body = function.functionExpression.body;
@@ -7105,7 +7374,7 @@ String f(E e) {
   }
 }
 ''');
-    LibraryElement element = resolve(source);
+    LibraryElement element = resolve2(source);
     CompilationUnit unit = resolveCompilationUnit(source, element);
     FunctionDeclaration function = unit.declarations.last;
     BlockFunctionBody body = function.functionExpression.body;
@@ -7125,7 +7394,7 @@ String f(E e) {
   }
 }
 ''');
-    LibraryElement element = resolve(source);
+    LibraryElement element = resolve2(source);
     CompilationUnit unit = resolveCompilationUnit(source, element);
     FunctionDeclaration function = unit.declarations.last;
     BlockFunctionBody body = function.functionExpression.body;
@@ -7139,22 +7408,22 @@ class FileBasedSourceTest {
   void test_equals_false_differentFiles() {
     JavaFile file1 = FileUtilities2.createFile("/does/not/exist1.dart");
     JavaFile file2 = FileUtilities2.createFile("/does/not/exist2.dart");
-    FileBasedSource source1 = new FileBasedSource.con1(file1);
-    FileBasedSource source2 = new FileBasedSource.con1(file2);
+    FileBasedSource source1 = new FileBasedSource(file1);
+    FileBasedSource source2 = new FileBasedSource(file2);
     expect(source1 == source2, isFalse);
   }
 
   void test_equals_false_null() {
     JavaFile file = FileUtilities2.createFile("/does/not/exist1.dart");
-    FileBasedSource source1 = new FileBasedSource.con1(file);
+    FileBasedSource source1 = new FileBasedSource(file);
     expect(source1 == null, isFalse);
   }
 
   void test_equals_true() {
     JavaFile file1 = FileUtilities2.createFile("/does/not/exist.dart");
     JavaFile file2 = FileUtilities2.createFile("/does/not/exist.dart");
-    FileBasedSource source1 = new FileBasedSource.con1(file1);
-    FileBasedSource source2 = new FileBasedSource.con1(file2);
+    FileBasedSource source1 = new FileBasedSource(file1);
+    FileBasedSource source2 = new FileBasedSource(file2);
     expect(source1 == source2, isTrue);
   }
 
@@ -7204,28 +7473,28 @@ class FileBasedSourceTest {
     SourceFactory factory = new SourceFactory([new FileUriResolver()]);
     String fullPath = "/does/not/exist.dart";
     JavaFile file = FileUtilities2.createFile(fullPath);
-    FileBasedSource source = new FileBasedSource.con1(file);
+    FileBasedSource source = new FileBasedSource(file);
     expect(factory.fromEncoding(source.encoding), source);
   }
 
   void test_getFullName() {
     String fullPath = "/does/not/exist.dart";
     JavaFile file = FileUtilities2.createFile(fullPath);
-    FileBasedSource source = new FileBasedSource.con1(file);
+    FileBasedSource source = new FileBasedSource(file);
     expect(source.fullName, file.getAbsolutePath());
   }
 
   void test_getShortName() {
     JavaFile file = FileUtilities2.createFile("/does/not/exist.dart");
-    FileBasedSource source = new FileBasedSource.con1(file);
+    FileBasedSource source = new FileBasedSource(file);
     expect(source.shortName, "exist.dart");
   }
 
   void test_hashCode() {
     JavaFile file1 = FileUtilities2.createFile("/does/not/exist.dart");
     JavaFile file2 = FileUtilities2.createFile("/does/not/exist.dart");
-    FileBasedSource source1 = new FileBasedSource.con1(file1);
-    FileBasedSource source2 = new FileBasedSource.con1(file2);
+    FileBasedSource source1 = new FileBasedSource(file1);
+    FileBasedSource source2 = new FileBasedSource(file2);
     expect(source2.hashCode, source1.hashCode);
   }
 
@@ -7248,7 +7517,7 @@ class FileBasedSourceTest {
 
   void test_isInSystemLibrary_false() {
     JavaFile file = FileUtilities2.createFile("/does/not/exist.dart");
-    FileBasedSource source = new FileBasedSource.con1(file);
+    FileBasedSource source = new FileBasedSource(file);
     expect(source, isNotNull);
     expect(source.fullName, file.getAbsolutePath());
     expect(source.isInSystemLibrary, isFalse);
@@ -7256,7 +7525,7 @@ class FileBasedSourceTest {
 
   void test_issue14500() {
     // see https://code.google.com/p/dart/issues/detail?id=14500
-    FileBasedSource source = new FileBasedSource.con1(
+    FileBasedSource source = new FileBasedSource(
         FileUtilities2.createFile("/some/packages/foo:bar.dart"));
     expect(source, isNotNull);
     expect(source.exists(), isFalse);
@@ -7265,7 +7534,7 @@ class FileBasedSourceTest {
   void test_resolveRelative_dart_fileName() {
     JavaFile file = FileUtilities2.createFile("/a/b/test.dart");
     FileBasedSource source =
-        new FileBasedSource.con2(parseUriWithException("dart:test"), file);
+        new FileBasedSource(file, parseUriWithException("dart:test"));
     expect(source, isNotNull);
     Uri relative = source.resolveRelativeUri(parseUriWithException("lib.dart"));
     expect(relative, isNotNull);
@@ -7275,7 +7544,7 @@ class FileBasedSourceTest {
   void test_resolveRelative_dart_filePath() {
     JavaFile file = FileUtilities2.createFile("/a/b/test.dart");
     FileBasedSource source =
-        new FileBasedSource.con2(parseUriWithException("dart:test"), file);
+        new FileBasedSource(file, parseUriWithException("dart:test"));
     expect(source, isNotNull);
     Uri relative =
         source.resolveRelativeUri(parseUriWithException("c/lib.dart"));
@@ -7285,8 +7554,8 @@ class FileBasedSourceTest {
 
   void test_resolveRelative_dart_filePathWithParent() {
     JavaFile file = FileUtilities2.createFile("/a/b/test.dart");
-    FileBasedSource source = new FileBasedSource.con2(
-        parseUriWithException("dart:test/b/test.dart"), file);
+    FileBasedSource source = new FileBasedSource(
+        file, parseUriWithException("dart:test/b/test.dart"));
     expect(source, isNotNull);
     Uri relative =
         source.resolveRelativeUri(parseUriWithException("../c/lib.dart"));
@@ -7302,7 +7571,7 @@ class FileBasedSourceTest {
       return;
     }
     JavaFile file = FileUtilities2.createFile("/a/b/test.dart");
-    FileBasedSource source = new FileBasedSource.con1(file);
+    FileBasedSource source = new FileBasedSource(file);
     expect(source, isNotNull);
     Uri relative = source.resolveRelativeUri(parseUriWithException("lib.dart"));
     expect(relative, isNotNull);
@@ -7317,7 +7586,7 @@ class FileBasedSourceTest {
       return;
     }
     JavaFile file = FileUtilities2.createFile("/a/b/test.dart");
-    FileBasedSource source = new FileBasedSource.con1(file);
+    FileBasedSource source = new FileBasedSource(file);
     expect(source, isNotNull);
     Uri relative =
         source.resolveRelativeUri(parseUriWithException("c/lib.dart"));
@@ -7332,7 +7601,7 @@ class FileBasedSourceTest {
       return;
     }
     JavaFile file = FileUtilities2.createFile("/a/b/test.dart");
-    FileBasedSource source = new FileBasedSource.con1(file);
+    FileBasedSource source = new FileBasedSource(file);
     expect(source, isNotNull);
     Uri relative =
         source.resolveRelativeUri(parseUriWithException("../c/lib.dart"));
@@ -7342,8 +7611,8 @@ class FileBasedSourceTest {
 
   void test_resolveRelative_package_fileName() {
     JavaFile file = FileUtilities2.createFile("/a/b/test.dart");
-    FileBasedSource source = new FileBasedSource.con2(
-        parseUriWithException("package:b/test.dart"), file);
+    FileBasedSource source =
+        new FileBasedSource(file, parseUriWithException("package:b/test.dart"));
     expect(source, isNotNull);
     Uri relative = source.resolveRelativeUri(parseUriWithException("lib.dart"));
     expect(relative, isNotNull);
@@ -7352,8 +7621,8 @@ class FileBasedSourceTest {
 
   void test_resolveRelative_package_fileNameWithoutPackageName() {
     JavaFile file = FileUtilities2.createFile("/a/b/test.dart");
-    FileBasedSource source = new FileBasedSource.con2(
-        parseUriWithException("package:test.dart"), file);
+    FileBasedSource source =
+        new FileBasedSource(file, parseUriWithException("package:test.dart"));
     expect(source, isNotNull);
     Uri relative = source.resolveRelativeUri(parseUriWithException("lib.dart"));
     expect(relative, isNotNull);
@@ -7362,8 +7631,8 @@ class FileBasedSourceTest {
 
   void test_resolveRelative_package_filePath() {
     JavaFile file = FileUtilities2.createFile("/a/b/test.dart");
-    FileBasedSource source = new FileBasedSource.con2(
-        parseUriWithException("package:b/test.dart"), file);
+    FileBasedSource source =
+        new FileBasedSource(file, parseUriWithException("package:b/test.dart"));
     expect(source, isNotNull);
     Uri relative =
         source.resolveRelativeUri(parseUriWithException("c/lib.dart"));
@@ -7373,8 +7642,8 @@ class FileBasedSourceTest {
 
   void test_resolveRelative_package_filePathWithParent() {
     JavaFile file = FileUtilities2.createFile("/a/b/test.dart");
-    FileBasedSource source = new FileBasedSource.con2(
-        parseUriWithException("package:a/b/test.dart"), file);
+    FileBasedSource source = new FileBasedSource(
+        file, parseUriWithException("package:a/b/test.dart"));
     expect(source, isNotNull);
     Uri relative =
         source.resolveRelativeUri(parseUriWithException("../c/lib.dart"));
@@ -7385,7 +7654,7 @@ class FileBasedSourceTest {
   void test_system() {
     JavaFile file = FileUtilities2.createFile("/does/not/exist.dart");
     FileBasedSource source =
-        new FileBasedSource.con2(parseUriWithException("dart:core"), file);
+        new FileBasedSource(file, parseUriWithException("dart:core"));
     expect(source, isNotNull);
     expect(source.fullName, file.getAbsolutePath());
     expect(source.isInSystemLibrary, isTrue);
@@ -7614,7 +7883,7 @@ class HtmlTagInfoBuilderTest extends HtmlParserTest {
 
 @reflectiveTest
 class HtmlUnitBuilderTest extends EngineTestCase {
-  AnalysisContextImpl _context;
+  InternalAnalysisContext _context;
   @override
   void setUp() {
     _context = AnalysisContextFactory.contextWithCore();
@@ -7743,14 +8012,9 @@ class HtmlUnitBuilderTest_ExpectedVariable {
 @reflectiveTest
 class HtmlWarningCodeTest extends EngineTestCase {
   /**
-   * The source factory used to create the sources to be resolved.
-   */
-  SourceFactory _sourceFactory;
-
-  /**
    * The analysis context used to resolve the HTML files.
    */
-  AnalysisContextImpl _context;
+  InternalAnalysisContext _context;
 
   /**
    * The contents of the 'test.html' file.
@@ -7763,14 +8027,11 @@ class HtmlWarningCodeTest extends EngineTestCase {
   List<AnalysisError> _errors;
   @override
   void setUp() {
-    _sourceFactory = new SourceFactory([new FileUriResolver()]);
-    _context = new AnalysisContextImpl();
-    _context.sourceFactory = _sourceFactory;
+    _context = AnalysisContextFactory.contextWithCore();
   }
 
   @override
   void tearDown() {
-    _sourceFactory = null;
     _context = null;
     _contents = null;
     _errors = null;
@@ -7848,120 +8109,56 @@ class MockDartSdk implements DartSdk {
 
 @reflectiveTest
 class ReferenceFinderTest extends EngineTestCase {
-  DirectedGraph<AstNode> _referenceGraph;
-  Map<PotentiallyConstVariableElement, VariableDeclaration> _variableDeclarationMap;
-  Map<ConstructorElement, ConstructorDeclaration> _constructorDeclarationMap;
-  VariableDeclaration _head;
-  AstNode _tail;
+  DirectedGraph<ConstantEvaluationTarget> _referenceGraph;
+  VariableElement _head;
+  Element _tail;
   @override
   void setUp() {
-    _referenceGraph = new DirectedGraph<AstNode>();
-    _variableDeclarationMap =
-        new HashMap<PotentiallyConstVariableElement, VariableDeclaration>();
-    _constructorDeclarationMap =
-        new HashMap<ConstructorElement, ConstructorDeclaration>();
-    _head = AstFactory.variableDeclaration("v1");
-  }
-  void test_visitInstanceCreationExpression_const() {
-    _visitNode(_makeTailConstructor("A", true, true, true));
-    _assertOneArc(_tail);
-  }
-  void test_visitInstanceCreationExpression_nonConstDeclaration() {
-    // In the source:
-    //   const x = const A();
-    // x depends on "const A()" even if the A constructor
-    // isn't declared as const.
-    _visitNode(_makeTailConstructor("A", false, true, true));
-    _assertOneArc(_tail);
-  }
-  void test_visitInstanceCreationExpression_nonConstUsage() {
-    _visitNode(_makeTailConstructor("A", true, false, true));
-    _assertNoArcs();
-  }
-  void test_visitInstanceCreationExpression_notInMap() {
-    // In the source:
-    //   const x = const A();
-    // x depends on "const A()" even if the AST for the A constructor
-    // isn't available.
-    _visitNode(_makeTailConstructor("A", true, true, false));
-    _assertOneArc(_tail);
+    _referenceGraph = new DirectedGraph<ConstantEvaluationTarget>();
+    _head = ElementFactory.topLevelVariableElement2("v1");
   }
   void test_visitSimpleIdentifier_const() {
-    _visitNode(_makeTailVariable("v2", true, true));
+    _visitNode(_makeTailVariable("v2", true));
     _assertOneArc(_tail);
   }
   void test_visitSimpleIdentifier_nonConst() {
-    _visitNode(_makeTailVariable("v2", false, true));
-    _assertNoArcs();
-  }
-  void test_visitSimpleIdentifier_notInMap() {
-    _visitNode(_makeTailVariable("v2", true, false));
-    _assertNoArcs();
+    _visitNode(_makeTailVariable("v2", false));
+    _assertOneArc(_tail);
   }
   void test_visitSuperConstructorInvocation_const() {
-    _visitNode(_makeTailSuperConstructorInvocation("A", true, true));
+    _visitNode(_makeTailSuperConstructorInvocation("A", true));
     _assertOneArc(_tail);
   }
   void test_visitSuperConstructorInvocation_nonConst() {
-    _visitNode(_makeTailSuperConstructorInvocation("A", false, true));
-    _assertNoArcs();
-  }
-  void test_visitSuperConstructorInvocation_notInMap() {
-    _visitNode(_makeTailSuperConstructorInvocation("A", true, false));
-    _assertNoArcs();
+    _visitNode(_makeTailSuperConstructorInvocation("A", false));
+    _assertOneArc(_tail);
   }
   void test_visitSuperConstructorInvocation_unresolved() {
     SuperConstructorInvocation superConstructorInvocation =
         AstFactory.superConstructorInvocation();
-    _tail = superConstructorInvocation;
     _visitNode(superConstructorInvocation);
     _assertNoArcs();
   }
   void _assertNoArcs() {
-    Set<AstNode> tails = _referenceGraph.getTails(_head);
+    Set<ConstantEvaluationTarget> tails = _referenceGraph.getTails(_head);
     expect(tails, hasLength(0));
   }
-  void _assertOneArc(AstNode tail) {
-    Set<AstNode> tails = _referenceGraph.getTails(_head);
+  void _assertOneArc(Element tail) {
+    Set<ConstantEvaluationTarget> tails = _referenceGraph.getTails(_head);
     expect(tails, hasLength(1));
     expect(tails.first, same(tail));
   }
-  ReferenceFinder _createReferenceFinder(AstNode source) => new ReferenceFinder(
-      source, _referenceGraph, _variableDeclarationMap,
-      _constructorDeclarationMap);
-  InstanceCreationExpression _makeTailConstructor(
-      String name, bool isConstDeclaration, bool isConstUsage, bool inMap) {
-    List<ConstructorInitializer> initializers =
-        new List<ConstructorInitializer>();
-    ConstructorDeclaration constructorDeclaration = AstFactory
-        .constructorDeclaration(AstFactory.identifier3(name), null,
-            AstFactory.formalParameterList(), initializers);
-    if (isConstDeclaration) {
-      constructorDeclaration.constKeyword = new KeywordToken(Keyword.CONST, 0);
-    }
-    ClassElementImpl classElement = ElementFactory.classElement2(name);
-    SimpleIdentifier identifier = AstFactory.identifier3(name);
-    TypeName type = AstFactory.typeName3(identifier);
-    InstanceCreationExpression instanceCreationExpression = AstFactory
-        .instanceCreationExpression2(
-            isConstUsage ? Keyword.CONST : Keyword.NEW, type);
-    _tail = instanceCreationExpression;
-    ConstructorElementImpl constructorElement = ElementFactory
-        .constructorElement(classElement, name, isConstDeclaration);
-    if (inMap) {
-      _constructorDeclarationMap[constructorElement] = constructorDeclaration;
-    }
-    instanceCreationExpression.staticElement = constructorElement;
-    return instanceCreationExpression;
-  }
+  ReferenceFinder _createReferenceFinder(ConstantEvaluationTarget source) =>
+      new ReferenceFinder((ConstantEvaluationTarget dependency) {
+    _referenceGraph.addEdge(source, dependency);
+  });
   SuperConstructorInvocation _makeTailSuperConstructorInvocation(
-      String name, bool isConst, bool inMap) {
+      String name, bool isConst) {
     List<ConstructorInitializer> initializers =
         new List<ConstructorInitializer>();
     ConstructorDeclaration constructorDeclaration = AstFactory
         .constructorDeclaration(AstFactory.identifier3(name), null,
             AstFactory.formalParameterList(), initializers);
-    _tail = constructorDeclaration;
     if (isConst) {
       constructorDeclaration.constKeyword = new KeywordToken(Keyword.CONST, 0);
     }
@@ -7970,24 +8167,19 @@ class ReferenceFinderTest extends EngineTestCase {
         AstFactory.superConstructorInvocation();
     ConstructorElementImpl constructorElement =
         ElementFactory.constructorElement(classElement, name, isConst);
-    if (inMap) {
-      _constructorDeclarationMap[constructorElement] = constructorDeclaration;
-    }
+    _tail = constructorElement;
     superConstructorInvocation.staticElement = constructorElement;
     return superConstructorInvocation;
   }
-  SimpleIdentifier _makeTailVariable(String name, bool isConst, bool inMap) {
+  SimpleIdentifier _makeTailVariable(String name, bool isConst) {
     VariableDeclaration variableDeclaration =
         AstFactory.variableDeclaration(name);
-    _tail = variableDeclaration;
     ConstLocalVariableElementImpl variableElement =
         ElementFactory.constLocalVariableElement(name);
+    _tail = variableElement;
     variableElement.const3 = isConst;
     AstFactory.variableDeclarationList2(
         isConst ? Keyword.CONST : Keyword.VAR, [variableDeclaration]);
-    if (inMap) {
-      _variableDeclarationMap[variableElement] = variableDeclaration;
-    }
     SimpleIdentifier identifier = AstFactory.identifier3(name);
     identifier.staticElement = variableElement;
     return identifier;
@@ -8103,8 +8295,8 @@ class SourceFactoryTest {
     SourceFactory factory =
         new SourceFactory([new UriResolver_nonAbsolute_absolute()]);
     String absolutePath = "/does/not/matter.dart";
-    Source containingSource = new FileBasedSource.con1(
-        FileUtilities2.createFile("/does/not/exist.dart"));
+    Source containingSource =
+        new FileBasedSource(FileUtilities2.createFile("/does/not/exist.dart"));
     Source result = factory.resolveUri(containingSource, absolutePath);
     expect(result.fullName,
         FileUtilities2.createFile(absolutePath).getAbsolutePath());
@@ -8112,8 +8304,8 @@ class SourceFactoryTest {
   void test_resolveUri_nonAbsolute_relative() {
     SourceFactory factory =
         new SourceFactory([new UriResolver_nonAbsolute_relative()]);
-    Source containingSource = new FileBasedSource.con1(
-        FileUtilities2.createFile("/does/not/have.dart"));
+    Source containingSource =
+        new FileBasedSource(FileUtilities2.createFile("/does/not/have.dart"));
     Source result = factory.resolveUri(containingSource, "exist.dart");
     expect(result.fullName,
         FileUtilities2.createFile("/does/not/exist.dart").getAbsolutePath());
@@ -8150,8 +8342,8 @@ class SourceFactoryTest {
   void test_restoreUri() {
     JavaFile file1 = FileUtilities2.createFile("/some/file1.dart");
     JavaFile file2 = FileUtilities2.createFile("/some/file2.dart");
-    Source source1 = new FileBasedSource.con1(file1);
-    Source source2 = new FileBasedSource.con1(file2);
+    Source source1 = new FileBasedSource(file1);
+    Source source2 = new FileBasedSource(file2);
     Uri expected1 = parseUriWithException("file:///my_file.dart");
     SourceFactory factory =
         new SourceFactory([new UriResolver_restoreUri(source1, expected1)]);
@@ -8251,14 +8443,14 @@ class UriResolver_absolute extends UriResolver {
 class UriResolver_nonAbsolute_absolute extends UriResolver {
   @override
   Source resolveAbsolute(Uri uri) {
-    return new FileBasedSource.con2(uri, new JavaFile.fromUri(uri));
+    return new FileBasedSource(new JavaFile.fromUri(uri), uri);
   }
 }
 
 class UriResolver_nonAbsolute_relative extends UriResolver {
   @override
   Source resolveAbsolute(Uri uri) {
-    return new FileBasedSource.con2(uri, new JavaFile.fromUri(uri));
+    return new FileBasedSource(new JavaFile.fromUri(uri), uri);
   }
 }
 
@@ -8293,65 +8485,6 @@ class UriResolver_SourceFactoryTest_test_fromEncoding_valid
       return new TestSource();
     }
     return null;
-  }
-}
-
-class ValidatingConstantValueComputer extends ConstantValueComputer {
-  AstNode _nodeBeingEvaluated;
-  ValidatingConstantValueComputer(
-      TypeProvider typeProvider, DeclaredVariables declaredVariables)
-      : super(typeProvider, declaredVariables);
-
-  @override
-  void beforeComputeValue(AstNode constNode) {
-    super.beforeComputeValue(constNode);
-    _nodeBeingEvaluated = constNode;
-  }
-
-  @override
-  void beforeGetConstantInitializers(ConstructorElement constructor) {
-    super.beforeGetConstantInitializers(constructor);
-    // If we are getting the constant initializers for a node in the graph,
-    // make sure we properly recorded the dependency.
-    ConstructorDeclaration node = findConstructorDeclaration(constructor);
-    if (node != null && referenceGraph.nodes.contains(node)) {
-      expect(referenceGraph.containsPath(_nodeBeingEvaluated, node), isTrue);
-    }
-  }
-
-  @override
-  void beforeGetParameterDefault(ParameterElement parameter) {
-    super.beforeGetParameterDefault(parameter);
-    // Find the ConstructorElement and figure out which
-    // parameter we're talking about.
-    ConstructorElement constructor =
-        parameter.getAncestor((element) => element is ConstructorElement);
-    int parameterIndex;
-    List<ParameterElement> parameters = constructor.parameters;
-    int numParameters = parameters.length;
-    for (parameterIndex = 0; parameterIndex < numParameters; parameterIndex++) {
-      if (identical(parameters[parameterIndex], parameter)) {
-        break;
-      }
-    }
-    expect(parameterIndex < numParameters, isTrue);
-    // If we are getting the default parameter for a constructor in the graph,
-    // make sure we properly recorded the dependency on the parameter.
-    ConstructorDeclaration constructorNode =
-        constructorDeclarationMap[constructor];
-    if (constructorNode != null) {
-      FormalParameter parameterNode =
-          constructorNode.parameters.parameters[parameterIndex];
-      expect(referenceGraph.nodes.contains(parameterNode), isTrue);
-      expect(referenceGraph.containsPath(_nodeBeingEvaluated, parameterNode),
-          isTrue);
-    }
-  }
-
-  @override
-  ConstantVisitor createConstantVisitor(ErrorReporter errorReporter) {
-    return new ConstantValueComputerTest_ValidatingConstantVisitor(
-        typeProvider, referenceGraph, _nodeBeingEvaluated, errorReporter);
   }
 }
 

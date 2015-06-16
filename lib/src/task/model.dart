@@ -9,27 +9,10 @@ import 'package:analyzer/src/task/inputs.dart';
 import 'package:analyzer/task/model.dart';
 
 /**
- * A concrete implementation of a [CompositeResultDescriptor].
+ * The default [ResultCachingPolicy], results are never flushed.
  */
-class CompositeResultDescriptorImpl<V> extends ResultDescriptorImpl<V>
-    implements CompositeResultDescriptor<V> {
-  /**
-   * The results that contribute to this result.
-   */
-  final List<ResultDescriptor<V>> contributors = <ResultDescriptor<V>>[];
-
-  /**
-   * Initialize a newly created composite result to have the given [name].
-   */
-  CompositeResultDescriptorImpl(String name) : super(name, null);
-
-  /**
-   * Record that the given analysis [result] contibutes to this result.
-   */
-  void recordContributor(ResultDescriptor<V> result) {
-    contributors.add(result);
-  }
-}
+const ResultCachingPolicy DEFAULT_CACHING_POLICY =
+    const SimpleResultCachingPolicy(-1, -1);
 
 /**
  * A concrete implementation of a [ListResultDescriptor].
@@ -38,12 +21,12 @@ class ListResultDescriptorImpl<E> extends ResultDescriptorImpl<List<E>>
     implements ListResultDescriptor<E> {
   /**
    * Initialize a newly created analysis result to have the given [name] and
-   * [defaultValue]. If a composite result is specified, then this result will
-   * contribute to it.
+   * [defaultValue]. If a [cachingPolicy] is provided, it will control how long
+   * values associated with this result will remain in the cache.
    */
   ListResultDescriptorImpl(String name, List<E> defaultValue,
-      {CompositeResultDescriptor contributesTo})
-      : super(name, defaultValue, contributesTo: contributesTo);
+      {ResultCachingPolicy<List<E>> cachingPolicy: DEFAULT_CACHING_POLICY})
+      : super(name, defaultValue, cachingPolicy: cachingPolicy);
 
   @override
   ListTaskInput<E> of(AnalysisTarget target) =>
@@ -54,6 +37,11 @@ class ListResultDescriptorImpl<E> extends ResultDescriptorImpl<List<E>>
  * A concrete implementation of a [ResultDescriptor].
  */
 class ResultDescriptorImpl<V> implements ResultDescriptor<V> {
+  static int _NEXT_HASH = 0;
+
+  @override
+  final hashCode = _NEXT_HASH++;
+
   /**
    * The name of the result, used for debugging.
    */
@@ -65,15 +53,21 @@ class ResultDescriptorImpl<V> implements ResultDescriptor<V> {
   final V defaultValue;
 
   /**
+   * The caching policy for results described by this descriptor.
+   */
+  final ResultCachingPolicy<V> cachingPolicy;
+
+  /**
    * Initialize a newly created analysis result to have the given [name] and
-   * [defaultValue]. If a composite result is specified, then this result will
-   * contribute to it.
+   * [defaultValue]. If a [cachingPolicy] is provided, it will control how long
+   * values associated with this result will remain in the cache.
    */
   ResultDescriptorImpl(this.name, this.defaultValue,
-      {CompositeResultDescriptor contributesTo}) {
-    if (contributesTo is CompositeResultDescriptorImpl) {
-      contributesTo.recordContributor(this);
-    }
+      {this.cachingPolicy: DEFAULT_CACHING_POLICY});
+
+  @override
+  bool operator ==(Object other) {
+    return other is ResultDescriptorImpl && other.hashCode == hashCode;
   }
 
   @override
@@ -82,6 +76,23 @@ class ResultDescriptorImpl<V> implements ResultDescriptor<V> {
 
   @override
   String toString() => name;
+}
+
+/**
+ * A simple [ResultCachingPolicy] implementation that consider all the objects
+ * to be of the size `1`.
+ */
+class SimpleResultCachingPolicy<T> implements ResultCachingPolicy<T> {
+  @override
+  final int maxActiveSize;
+
+  @override
+  final int maxIdleSize;
+
+  const SimpleResultCachingPolicy(this.maxActiveSize, this.maxIdleSize);
+
+  @override
+  int measure(T object) => 1;
 }
 
 /**

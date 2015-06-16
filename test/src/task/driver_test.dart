@@ -4,27 +4,22 @@
 
 library test.src.task.driver_test;
 
-import 'dart:async';
-import 'dart:collection';
-
-import 'package:analyzer/src/cancelable_future.dart';
 import 'package:analyzer/src/context/cache.dart';
-import 'package:analyzer/src/generated/ast.dart';
-import 'package:analyzer/src/generated/constant.dart';
-import 'package:analyzer/src/generated/element.dart';
-import 'package:analyzer/src/generated/engine.dart' hide AnalysisTask;
-import 'package:analyzer/src/generated/error.dart';
-import 'package:analyzer/src/generated/html.dart';
+import 'package:analyzer/src/generated/engine.dart'
+    hide
+        AnalysisCache,
+        AnalysisContextImpl,
+        AnalysisTask,
+        UniversalCachePartition,
+        WorkManager;
 import 'package:analyzer/src/generated/java_engine.dart';
-import 'package:analyzer/src/generated/resolver.dart';
-import 'package:analyzer/src/generated/source.dart';
 import 'package:analyzer/src/task/driver.dart';
 import 'package:analyzer/src/task/inputs.dart';
 import 'package:analyzer/src/task/manager.dart';
 import 'package:analyzer/task/model.dart';
+import 'package:typed_mock/typed_mock.dart';
 import 'package:unittest/unittest.dart';
 
-import '../../generated/resolver_test.dart';
 import '../../generated/test_support.dart';
 import '../../reflective_tests.dart';
 import 'test_support.dart';
@@ -32,20 +27,46 @@ import 'test_support.dart';
 main() {
   groupSep = ' | ';
   runReflectiveTests(AnalysisDriverTest);
-  runReflectiveTests(WorkOrderTest);
+  runReflectiveTests(CycleAwareDependencyWalkerTest);
   runReflectiveTests(WorkItemTest);
+  runReflectiveTests(WorkOrderTest);
+}
+
+class AbstractDriverTest {
+  TaskManager taskManager = new TaskManager();
+  List<WorkManager> workManagers = <WorkManager>[];
+  InternalAnalysisContext context = new _InternalAnalysisContextMock();
+  AnalysisDriver analysisDriver;
+
+  void setUp() {
+    context = new _InternalAnalysisContextMock();
+    analysisDriver = new AnalysisDriver(taskManager, workManagers, context);
+  }
 }
 
 @reflectiveTest
-class AnalysisDriverTest extends EngineTestCase {
-  TaskManager manager;
-  _TestContext context;
-  AnalysisDriver driver;
+class AnalysisDriverTest extends AbstractDriverTest {
+  WorkManager workManager1 = new _WorkManagerMock();
+  WorkManager workManager2 = new _WorkManagerMock();
+
+  AnalysisTarget target1 = new TestSource('/1.dart');
+  AnalysisTarget target2 = new TestSource('/2.dart');
+
+  ResultDescriptor result1 = new ResultDescriptor('result1', -1);
+  ResultDescriptor result2 = new ResultDescriptor('result2', -2);
+
+  TaskDescriptor descriptor1;
+  TaskDescriptor descriptor2;
 
   void setUp() {
-    manager = new TaskManager();
-    context = new _TestContext();
-    driver = new AnalysisDriver(manager, context);
+    super.setUp();
+    when(workManager1.getNextResultPriority())
+        .thenReturn(WorkOrderPriority.NONE);
+    when(workManager2.getNextResultPriority())
+        .thenReturn(WorkOrderPriority.NONE);
+
+    workManagers.add(workManager1);
+    workManagers.add(workManager2);
   }
 
   test_computeResult() {
@@ -55,85 +76,56 @@ class AnalysisDriverTest extends EngineTestCase {
     TaskDescriptor descriptor = new TaskDescriptor(
         'task', (context, target) => task, (target) => {}, [result]);
     task = new TestAnalysisTask(context, target, descriptor: descriptor);
-    manager.addTaskDescriptor(descriptor);
+    taskManager.addTaskDescriptor(descriptor);
 
-    driver.computeResult(target, result);
+    analysisDriver.computeResult(target, result);
     expect(context.getCacheEntry(target).getValue(result), 1);
   }
 
   test_create() {
-    expect(driver, isNotNull);
-    expect(driver.context, context);
-    expect(driver.currentWorkOrder, isNull);
-    expect(driver.taskManager, manager);
+    expect(analysisDriver, isNotNull);
+    expect(analysisDriver.context, context);
+    expect(analysisDriver.currentWorkOrder, isNull);
+    expect(analysisDriver.taskManager, taskManager);
   }
 
-  test_createNextWorkOrder_complete() {
-    AnalysisTarget priorityTarget = new TestSource();
-    AnalysisTarget normalTarget = new TestSource();
-    ResultDescriptor result = new ResultDescriptor('result', null);
-    TaskDescriptor descriptor = new TaskDescriptor('task',
-        (context, target) => new TestAnalysisTask(context, target),
-        (target) => {}, [result]);
-    manager.addGeneralResult(result);
-    manager.addTaskDescriptor(descriptor);
-    context.priorityTargets.add(priorityTarget);
-    context.getCacheEntry(priorityTarget).setValue(result, '');
-    context.explicitTargets.add(normalTarget);
-    context.getCacheEntry(priorityTarget).setValue(result, '');
-
-    expect(driver.createNextWorkOrder(), isNull);
-  }
-
-  test_createNextWorkOrder_normalTarget() {
-    AnalysisTarget priorityTarget = new TestSource();
-    AnalysisTarget normalTarget = new TestSource();
-    ResultDescriptor result = new ResultDescriptor('result', null);
-    TaskDescriptor descriptor = new TaskDescriptor('task',
-        (context, target) => new TestAnalysisTask(context, target),
-        (target) => {}, [result]);
-    manager.addGeneralResult(result);
-    manager.addTaskDescriptor(descriptor);
-    context.priorityTargets.add(priorityTarget);
-    context.getCacheEntry(priorityTarget).setValue(result, '');
-    context.explicitTargets.add(normalTarget);
-    context.getCacheEntry(normalTarget).setState(result, CacheState.INVALID);
-
-    WorkOrder workOrder = driver.createNextWorkOrder();
+  test_createNextWorkOrder_highLow() {
+    _configureDescriptors12();
+    when(workManager1.getNextResultPriority())
+        .thenReturn(WorkOrderPriority.PRIORITY);
+    when(workManager2.getNextResultPriority())
+        .thenReturn(WorkOrderPriority.NORMAL);
+    when(workManager1.getNextResult())
+        .thenReturn(new TargetedResult(target1, result1));
+    WorkOrder workOrder = analysisDriver.createNextWorkOrder();
     expect(workOrder, isNotNull);
     expect(workOrder.moveNext(), true);
-    expect(workOrder.currentItem.target, normalTarget);
+    expect(workOrder.current.target, target1);
+    expect(workOrder.current.descriptor, descriptor1);
   }
 
-  test_createNextWorkOrder_noTargets() {
-    ResultDescriptor result = new ResultDescriptor('result', null);
-    TaskDescriptor descriptor = new TaskDescriptor('task',
-        (context, target) => new TestAnalysisTask(context, target),
-        (target) => {}, [result]);
-    manager.addGeneralResult(result);
-    manager.addTaskDescriptor(descriptor);
-
-    expect(driver.createNextWorkOrder(), isNull);
-  }
-
-  test_createNextWorkOrder_priorityTarget() {
-    AnalysisTarget priorityTarget = new TestSource();
-    AnalysisTarget normalTarget = new TestSource();
-    ResultDescriptor result = new ResultDescriptor('result', null);
-    TaskDescriptor descriptor = new TaskDescriptor('task',
-        (context, target) => new TestAnalysisTask(context, target),
-        (target) => {}, [result]);
-    manager.addGeneralResult(result);
-    manager.addTaskDescriptor(descriptor);
-    context.priorityTargets.add(priorityTarget);
-    context.getCacheEntry(priorityTarget).setState(result, CacheState.INVALID);
-    context.explicitTargets.add(normalTarget);
-    context.getCacheEntry(normalTarget).setState(result, CacheState.INVALID);
-
-    WorkOrder workOrder = driver.createNextWorkOrder();
+  test_createNextWorkOrder_lowHigh() {
+    _configureDescriptors12();
+    when(workManager1.getNextResultPriority())
+        .thenReturn(WorkOrderPriority.NORMAL);
+    when(workManager2.getNextResultPriority())
+        .thenReturn(WorkOrderPriority.PRIORITY);
+    when(workManager2.getNextResult())
+        .thenReturn(new TargetedResult(target1, result1));
+    WorkOrder workOrder = analysisDriver.createNextWorkOrder();
     expect(workOrder, isNotNull);
     expect(workOrder.moveNext(), true);
-    expect(workOrder.currentItem.target, priorityTarget);
+    expect(workOrder.current.target, target1);
+    expect(workOrder.current.descriptor, descriptor1);
+  }
+
+  test_createNextWorkOrder_none() {
+    _configureDescriptors12();
+    when(workManager1.getNextResultPriority())
+        .thenReturn(WorkOrderPriority.NONE);
+    when(workManager2.getNextResultPriority())
+        .thenReturn(WorkOrderPriority.NONE);
+    expect(analysisDriver.createNextWorkOrder(), isNull);
   }
 
   test_createWorkOrderForResult_error() {
@@ -143,7 +135,7 @@ class AnalysisDriverTest extends EngineTestCase {
     context.getCacheEntry(target).setErrorState(
         exception, <ResultDescriptor>[result]);
 
-    expect(driver.createWorkOrderForResult(target, result), isNull);
+    expect(analysisDriver.createWorkOrderForResult(target, result), isNull);
   }
 
   test_createWorkOrderForResult_inProcess() {
@@ -151,7 +143,7 @@ class AnalysisDriverTest extends EngineTestCase {
     ResultDescriptor result = new ResultDescriptor('result', null);
     context.getCacheEntry(target).setState(result, CacheState.IN_PROCESS);
 
-    expect(driver.createWorkOrderForResult(target, result), isNull);
+    expect(analysisDriver.createWorkOrderForResult(target, result), isNull);
   }
 
   test_createWorkOrderForResult_invalid() {
@@ -160,19 +152,21 @@ class AnalysisDriverTest extends EngineTestCase {
     TaskDescriptor descriptor = new TaskDescriptor('task',
         (context, target) => new TestAnalysisTask(context, target),
         (target) => {}, [result]);
-    manager.addTaskDescriptor(descriptor);
+    taskManager.addTaskDescriptor(descriptor);
     context.getCacheEntry(target).setState(result, CacheState.INVALID);
 
-    WorkOrder workOrder = driver.createWorkOrderForResult(target, result);
+    WorkOrder workOrder =
+        analysisDriver.createWorkOrderForResult(target, result);
     expect(workOrder, isNotNull);
   }
 
   test_createWorkOrderForResult_valid() {
     AnalysisTarget target = new TestSource();
     ResultDescriptor result = new ResultDescriptor('result', null);
-    context.getCacheEntry(target).setValue(result, '');
+    context.getCacheEntry(target).setValue(
+        result, '', TargetedResult.EMPTY_LIST);
 
-    expect(driver.createWorkOrderForResult(target, result), isNull);
+    expect(analysisDriver.createWorkOrderForResult(target, result), isNull);
   }
 
   test_createWorkOrderForTarget_complete_generalTarget_generalResult() {
@@ -208,22 +202,65 @@ class AnalysisDriverTest extends EngineTestCase {
   }
 
   test_performAnalysisTask() {
-    AnalysisTarget target = new TestSource();
-    ResultDescriptor result = new ResultDescriptor('result', null);
-    TestAnalysisTask task;
-    TaskDescriptor descriptor = new TaskDescriptor(
-        'task', (context, target) => task, (target) => {}, [result]);
-    task = new TestAnalysisTask(context, target, descriptor: descriptor);
-    manager.addTaskDescriptor(descriptor);
-    manager.addGeneralResult(result);
-    context.priorityTargets.add(target);
+    _configureDescriptors12();
+    when(workManager1.getNextResultPriority()).thenReturnList(
+        <WorkOrderPriority>[WorkOrderPriority.NORMAL, WorkOrderPriority.NONE]);
+    when(workManager1.getNextResult())
+        .thenReturn(new TargetedResult(target1, result1));
 
-    expect(driver.performAnalysisTask(), true);
-    expect(driver.performAnalysisTask(), true);
-    expect(driver.performAnalysisTask(), false);
+    expect(analysisDriver.performAnalysisTask(), true);
+    expect(analysisDriver.performAnalysisTask(), true);
+    expect(analysisDriver.performAnalysisTask(), false);
   }
 
-  test_performAnalysisTask_infiniteLoop() {
+  test_performAnalysisTask_infiniteLoop_handled() {
+    AnalysisTarget target = new TestSource();
+    ResultDescriptor resultA = new ResultDescriptor('resultA', -1);
+    ResultDescriptor resultB = new ResultDescriptor('resultB', -2);
+    // configure tasks
+    TestAnalysisTask task1;
+    TestAnalysisTask task2;
+    TaskDescriptor descriptor1 = new TaskDescriptor('task1',
+        (context, target) => task1, (target) => {
+      'inputB': new SimpleTaskInput<int>(target, resultB)
+    }, [resultA]);
+    TaskDescriptor descriptor2 = new TaskDescriptor('task2',
+        (context, target) => task2, (target) => {
+      'inputA': new SimpleTaskInput<int>(target, resultA)
+    }, [resultB]);
+    task1 = new TestAnalysisTask(context, target,
+        descriptor: descriptor1,
+        results: [resultA],
+        value: 10,
+        handlesDependencyCycles: true);
+    task2 = new TestAnalysisTask(context, target,
+        descriptor: descriptor2,
+        results: [resultB],
+        value: 20,
+        handlesDependencyCycles: true);
+    taskManager.addTaskDescriptor(descriptor1);
+    taskManager.addTaskDescriptor(descriptor2);
+    // configure WorkManager
+    when(workManager1.getNextResultPriority()).thenReturnList(
+        <WorkOrderPriority>[WorkOrderPriority.NORMAL, WorkOrderPriority.NONE]);
+    when(workManager1.getNextResult())
+        .thenReturn(new TargetedResult(target, resultB));
+    // prepare work order
+    while (analysisDriver.performAnalysisTask()) {}
+    Set<TaskDescriptor> expectedCycle = [descriptor1, descriptor2].toSet();
+    expect(task1.dependencyCycle, isNotNull);
+    expect(task1.dependencyCycle.map((workItem) => workItem.descriptor).toSet(),
+        expectedCycle);
+    expect(task2.dependencyCycle, isNotNull);
+    expect(task2.dependencyCycle.map((workItem) => workItem.descriptor).toSet(),
+        expectedCycle);
+    CaughtException exception = context.getCacheEntry(target).exception;
+    expect(exception, isNull);
+    expect(context.getCacheEntry(target).getValue(resultA), 10);
+    expect(context.getCacheEntry(target).getValue(resultB), 20);
+  }
+
+  test_performAnalysisTask_infiniteLoop_unhandled() {
     AnalysisTarget target = new TestSource();
     ResultDescriptor resultA = new ResultDescriptor('resultA', -1);
     ResultDescriptor resultB = new ResultDescriptor('resultB', -2);
@@ -240,13 +277,16 @@ class AnalysisDriverTest extends EngineTestCase {
     }, [resultB]);
     task1 = new TestAnalysisTask(context, target, descriptor: descriptor1);
     task2 = new TestAnalysisTask(context, target, descriptor: descriptor2);
-    manager.addTaskDescriptor(descriptor1);
-    manager.addTaskDescriptor(descriptor2);
-    context.explicitTargets.add(target);
-    manager.addGeneralResult(resultB);
+    taskManager.addTaskDescriptor(descriptor1);
+    taskManager.addTaskDescriptor(descriptor2);
+    // configure WorkManager
+    when(workManager1.getNextResultPriority()).thenReturnList(
+        <WorkOrderPriority>[WorkOrderPriority.NORMAL, WorkOrderPriority.NONE]);
+    when(workManager1.getNextResult())
+        .thenReturn(new TargetedResult(target, resultB));
     // prepare work order
-    expect(driver.performAnalysisTask(), true);
-    expect(driver.performAnalysisTask(), true);
+    expect(analysisDriver.performAnalysisTask(), true);
+    expect(analysisDriver.performAnalysisTask(), true);
     CaughtException exception = context.getCacheEntry(target).exception;
     expect(exception, isNotNull);
     expect(exception.exception, new isInstanceOf<InfiniteTaskLoopException>());
@@ -269,24 +309,49 @@ class AnalysisDriverTest extends EngineTestCase {
         descriptor: descriptor1, results: [resultA], value: 10);
     task2 = new TestAnalysisTask(context, target,
         descriptor: descriptor2, value: 20);
-    manager.addTaskDescriptor(descriptor1);
-    manager.addTaskDescriptor(descriptor2);
-    context.explicitTargets.add(target);
-    manager.addGeneralResult(resultB);
+    taskManager.addTaskDescriptor(descriptor1);
+    taskManager.addTaskDescriptor(descriptor2);
+    // configure WorkManager
+    when(workManager1.getNextResultPriority()).thenReturnList(
+        <WorkOrderPriority>[WorkOrderPriority.NORMAL, WorkOrderPriority.NONE]);
+    when(workManager1.getNextResult())
+        .thenReturn(new TargetedResult(target, resultB));
     // prepare work order
-    expect(driver.performAnalysisTask(), true);
+    expect(analysisDriver.performAnalysisTask(), true);
     expect(context.getCacheEntry(target).getValue(resultA), -1);
     expect(context.getCacheEntry(target).getValue(resultB), -2);
     // compute resultA
-    expect(driver.performAnalysisTask(), true);
+    expect(analysisDriver.performAnalysisTask(), true);
     expect(context.getCacheEntry(target).getValue(resultA), 10);
     expect(context.getCacheEntry(target).getValue(resultB), -2);
     // compute resultB
-    expect(driver.performAnalysisTask(), true);
+    expect(analysisDriver.performAnalysisTask(), true);
     expect(context.getCacheEntry(target).getValue(resultA), 10);
     expect(context.getCacheEntry(target).getValue(resultB), 20);
     // done
-    expect(driver.performAnalysisTask(), false);
+    expect(analysisDriver.performAnalysisTask(), false);
+  }
+
+  test_performAnalysisTask_onResultComputed() {
+    AnalysisTarget target = new TestSource();
+    ResultDescriptor result = new ResultDescriptor('result', null);
+    TestAnalysisTask task;
+    TaskDescriptor descriptor = new TaskDescriptor(
+        'task', (context, target) => task, (target) => {}, [result]);
+    task = new TestAnalysisTask(context, target,
+        descriptor: descriptor, value: 42);
+    WorkItem item = new WorkItem(context, target, descriptor, null);
+
+    bool streamNotified = false;
+    analysisDriver.onResultComputed(result).listen((event) {
+      streamNotified = true;
+      expect(event.context, same(context));
+      expect(event.target, same(target));
+      expect(event.descriptor, same(result));
+      expect(event.value, 42);
+    });
+    analysisDriver.performWorkItem(item);
+    expect(streamNotified, isTrue);
   }
 
   test_performWorkItem_exceptionInTask() {
@@ -299,9 +364,9 @@ class AnalysisDriverTest extends EngineTestCase {
         'task', (context, target) => task, (target) => {}, [result]);
     task = new TestAnalysisTask(context, target,
         descriptor: descriptor, exception: exception);
-    WorkItem item = new WorkItem(context, target, descriptor);
+    WorkItem item = new WorkItem(context, target, descriptor, null);
 
-    driver.performWorkItem(item);
+    analysisDriver.performWorkItem(item);
     CacheEntry targetEntry = context.getCacheEntry(item.target);
     expect(targetEntry.exception, exception);
     expect(targetEntry.getState(result), CacheState.ERROR);
@@ -314,9 +379,9 @@ class AnalysisDriverTest extends EngineTestCase {
     TaskDescriptor descriptor = new TaskDescriptor(
         'task', (context, target) => task, (target) => {}, [result]);
     task = new TestAnalysisTask(context, target, descriptor: descriptor);
-    WorkItem item = new WorkItem(context, target, descriptor);
+    WorkItem item = new WorkItem(context, target, descriptor, null);
 
-    driver.performWorkItem(item);
+    analysisDriver.performWorkItem(item);
     CacheEntry targetEntry = context.getCacheEntry(item.target);
     expect(targetEntry.exception, isNull);
     expect(targetEntry.getState(result), CacheState.VALID);
@@ -330,10 +395,10 @@ class AnalysisDriverTest extends EngineTestCase {
         (target) => {}, [result]);
     CaughtException exception =
         new CaughtException(new AnalysisException(), null);
-    WorkItem item = new WorkItem(context, target, descriptor);
+    WorkItem item = new WorkItem(context, target, descriptor, null);
     item.exception = exception;
 
-    driver.performWorkItem(item);
+    analysisDriver.performWorkItem(item);
     CacheEntry targetEntry = context.getCacheEntry(item.target);
     expect(targetEntry.exception, exception);
     expect(targetEntry.getState(result), CacheState.ERROR);
@@ -345,11 +410,23 @@ class AnalysisDriverTest extends EngineTestCase {
         (context, target) => new TestAnalysisTask(context, target),
         (target) => {'one': inputResult.of(target)},
         [new ResultDescriptor('output', null)]);
-    driver.currentWorkOrder =
-        new WorkOrder(manager, new WorkItem(null, null, descriptor));
+    analysisDriver.currentWorkOrder =
+        new WorkOrder(taskManager, new WorkItem(null, null, descriptor, null));
 
-    driver.reset();
-    expect(driver.currentWorkOrder, isNull);
+    analysisDriver.reset();
+    expect(analysisDriver.currentWorkOrder, isNull);
+  }
+
+  void _configureDescriptors12() {
+    descriptor1 = new TaskDescriptor('task1', (context, target) =>
+            new TestAnalysisTask(context, target, descriptor: descriptor1),
+        (target) => {}, [result1]);
+    taskManager.addTaskDescriptor(descriptor1);
+
+    descriptor2 = new TaskDescriptor('task2', (context, target) =>
+            new TestAnalysisTask(context, target, descriptor: descriptor1),
+        (target) => {}, [result2]);
+    taskManager.addTaskDescriptor(descriptor2);
   }
 
   /**
@@ -367,24 +444,25 @@ class AnalysisDriverTest extends EngineTestCase {
         (context, target) => new TestAnalysisTask(context, target),
         (target) => {}, [result]);
     if (priorityResult) {
-      manager.addPriorityResult(result);
+      taskManager.addPriorityResult(result);
     } else {
-      manager.addGeneralResult(result);
+      taskManager.addGeneralResult(result);
     }
-    manager.addTaskDescriptor(descriptor);
+    taskManager.addTaskDescriptor(descriptor);
     if (priorityTarget) {
       context.priorityTargets.add(target);
     } else {
       context.explicitTargets.add(target);
     }
     if (complete) {
-      context.getCacheEntry(target).setValue(result, '');
+      context.getCacheEntry(target).setValue(
+          result, '', TargetedResult.EMPTY_LIST);
     } else {
       context.getCacheEntry(target).setState(result, CacheState.INVALID);
     }
 
     WorkOrder workOrder =
-        driver.createWorkOrderForTarget(target, priorityTarget);
+        analysisDriver.createWorkOrderForTarget(target, priorityTarget);
     if (complete) {
       expect(workOrder, isNull);
     } else if (priorityResult) {
@@ -396,20 +474,90 @@ class AnalysisDriverTest extends EngineTestCase {
 }
 
 @reflectiveTest
-class WorkItemTest extends EngineTestCase {
+class CycleAwareDependencyWalkerTest {
+  void checkGraph(Map<int, List<int>> graph, int startingNode,
+      List<StronglyConnectedComponent<int>> expectedResults) {
+    List<Set<int>> expectedResultsDisregardingOrder =
+        expectedResults.map((component) => component.nodes.toSet()).toList();
+    List<bool> expectedCycleIndicators =
+        expectedResults.map((component) => component.containsCycle).toList();
+    List<Set<int>> results = <Set<int>>[];
+    List<bool> cycleIndicators = <bool>[];
+    _TestCycleAwareDependencyWalker walker =
+        new _TestCycleAwareDependencyWalker(graph, startingNode);
+    while (true) {
+      StronglyConnectedComponent<int> nextStronglyConnectedComponent =
+          walker.getNextStronglyConnectedComponent();
+      if (nextStronglyConnectedComponent == null) {
+        break;
+      }
+      results.add(nextStronglyConnectedComponent.nodes.toSet());
+      cycleIndicators.add(nextStronglyConnectedComponent.containsCycle);
+      walker.evaluatedNodes.addAll(nextStronglyConnectedComponent.nodes);
+    }
+    expect(results, expectedResultsDisregardingOrder);
+    expect(cycleIndicators, expectedCycleIndicators);
+  }
+
+  StronglyConnectedComponent<int> cycle(List<int> nodes) =>
+      new StronglyConnectedComponent(nodes, true);
+
+  StronglyConnectedComponent<int> singleton(int node) =>
+      new StronglyConnectedComponent(<int>[node], false);
+
+  void test_complex_graph() {
+    checkGraph({
+      1: [2, 3],
+      2: [3, 4],
+      3: [],
+      4: [3, 5],
+      5: [2, 6],
+      6: [3, 4]
+    }, 1, [singleton(3), cycle([2, 4, 5, 6]), singleton(1)]);
+  }
+
+  void test_cycle_depends_on_other_nodes() {
+    checkGraph({1: [2, 3], 2: [4, 1], 3: [], 4: []}, 1, [
+      singleton(4),
+      singleton(3),
+      cycle([1, 2])
+    ]);
+  }
+
+  void test_initial_node_depends_on_cycle() {
+    checkGraph({1: [2], 2: [3], 3: [2]}, 1, [cycle([2, 3]), singleton(1)]);
+  }
+
+  void test_simple_cycle() {
+    checkGraph({1: [2], 2: [1]}, 1, [cycle([1, 2])]);
+  }
+
+  void test_simple_dependency_chain() {
+    checkGraph({1: [2], 2: []}, 1, [singleton(2), singleton(1)]);
+  }
+
+  void test_single_node() {
+    checkGraph({1: []}, 1, [singleton(1)]);
+  }
+
+  void test_single_node_cycle() {
+    checkGraph({1: [1]}, 1, [cycle([1])]);
+  }
+}
+
+@reflectiveTest
+class WorkItemTest extends AbstractDriverTest {
   test_buildTask_complete() {
-    AnalysisContext context = new _TestContext();
     AnalysisTarget target = new TestSource();
     TaskDescriptor descriptor = new TaskDescriptor('task',
         (context, target) => new TestAnalysisTask(context, target),
         (target) => {}, [new ResultDescriptor('output', null)]);
-    WorkItem item = new WorkItem(context, target, descriptor);
+    WorkItem item = new WorkItem(context, target, descriptor, null);
     AnalysisTask task = item.buildTask();
     expect(task, isNotNull);
   }
 
   test_buildTask_incomplete() {
-    AnalysisContext context = new _TestContext();
     AnalysisTarget target = new TestSource();
     ResultDescriptor inputResult = new ResultDescriptor('input', null);
     List<ResultDescriptor> outputResults =
@@ -417,16 +565,15 @@ class WorkItemTest extends EngineTestCase {
     TaskDescriptor descriptor = new TaskDescriptor('task', (context, target) =>
             new TestAnalysisTask(context, target, results: outputResults),
         (target) => {'one': inputResult.of(target)}, outputResults);
-    WorkItem item = new WorkItem(context, target, descriptor);
+    WorkItem item = new WorkItem(context, target, descriptor, null);
     expect(() => item.buildTask(), throwsStateError);
   }
 
   test_create() {
-    AnalysisContext context = new _TestContext();
     AnalysisTarget target = new TestSource();
     TaskDescriptor descriptor = new TaskDescriptor(
         'task', null, (target) => {}, [new ResultDescriptor('result', null)]);
-    WorkItem item = new WorkItem(context, target, descriptor);
+    WorkItem item = new WorkItem(context, target, descriptor, null);
     expect(item, isNotNull);
     expect(item.context, context);
     expect(item.descriptor, descriptor);
@@ -434,47 +581,44 @@ class WorkItemTest extends EngineTestCase {
   }
 
   test_gatherInputs_complete() {
-    TaskManager manager = new TaskManager();
-    AnalysisContext context = new _TestContext();
     AnalysisTarget target = new TestSource();
     TaskDescriptor descriptor = new TaskDescriptor('task',
         (context, target) => new TestAnalysisTask(context, target),
         (target) => {}, [new ResultDescriptor('output', null)]);
-    WorkItem item = new WorkItem(context, target, descriptor);
-    WorkItem result = item.gatherInputs(manager);
+    WorkItem item = new WorkItem(context, target, descriptor, null);
+    WorkItem result = item.gatherInputs(taskManager, []);
     expect(result, isNull);
     expect(item.exception, isNull);
   }
 
   test_gatherInputs_incomplete() {
-    TaskManager manager = new TaskManager();
-    AnalysisContext context = new _TestContext();
     AnalysisTarget target = new TestSource();
     ResultDescriptor resultA = new ResultDescriptor('resultA', null);
     ResultDescriptor resultB = new ResultDescriptor('resultB', null);
+    // prepare tasks
     TaskDescriptor task1 = new TaskDescriptor('task', (context, target) =>
             new TestAnalysisTask(context, target, results: [resultA]),
         (target) => {}, [resultA]);
     TaskDescriptor task2 = new TaskDescriptor('task',
         (context, target) => new TestAnalysisTask(context, target),
         (target) => {'one': resultA.of(target)}, [resultB]);
-    manager.addTaskDescriptor(task1);
-    manager.addTaskDescriptor(task2);
-    WorkItem item = new WorkItem(context, target, task2);
-    expect(item.gatherInputs(manager), isNotNull);
+    taskManager.addTaskDescriptor(task1);
+    taskManager.addTaskDescriptor(task2);
+    // gather inputs
+    WorkItem item = new WorkItem(context, target, task2, null);
+    WorkItem inputItem = item.gatherInputs(taskManager, []);
+    expect(inputItem, isNotNull);
   }
 
   test_gatherInputs_invalid() {
-    TaskManager manager = new TaskManager();
-    AnalysisContext context = new _TestContext();
     AnalysisTarget target = new TestSource();
     ResultDescriptor inputResult = new ResultDescriptor('input', null);
     TaskDescriptor descriptor = new TaskDescriptor('task',
         (context, target) => new TestAnalysisTask(context, target),
         (target) => {'one': inputResult.of(target)},
         [new ResultDescriptor('output', null)]);
-    WorkItem item = new WorkItem(context, target, descriptor);
-    WorkItem result = item.gatherInputs(manager);
+    WorkItem item = new WorkItem(context, target, descriptor, null);
+    WorkItem result = item.gatherInputs(taskManager, []);
     expect(result, isNull);
     expect(item.exception, isNotNull);
   }
@@ -487,18 +631,17 @@ class WorkOrderTest extends EngineTestCase {
     TaskDescriptor descriptor = new TaskDescriptor(
         'task', null, (_) => {}, [new ResultDescriptor('result', null)]);
     WorkOrder order =
-        new WorkOrder(manager, new WorkItem(null, null, descriptor));
+        new WorkOrder(manager, new WorkItem(null, null, descriptor, null));
     expect(order, isNotNull);
-    expect(order.currentItem, isNull);
-    expect(order.pendingItems, hasLength(1));
-    expect(order.taskManager, manager);
+    expect(order.currentItems, isNull);
+    expect(order.current, isNull);
   }
 
   test_moveNext() {
     TaskManager manager = new TaskManager();
     TaskDescriptor descriptor = new TaskDescriptor(
         'task', null, (_) => {}, [new ResultDescriptor('result', null)]);
-    WorkItem workItem = new WorkItem(null, null, descriptor);
+    WorkItem workItem = new WorkItem(null, null, descriptor, null);
     WorkOrder order = new WorkOrder(manager, workItem);
     // "item" has no child items
     expect(order.moveNext(), isTrue);
@@ -509,362 +652,60 @@ class WorkOrderTest extends EngineTestCase {
   }
 }
 
-class _TestContext implements InternalAnalysisContext {
-  InternalAnalysisContext baseContext =
-      AnalysisContextFactory.contextWithCore();
+/**
+ * A dummy [InternalAnalysisContext] that does not use [AnalysisDriver] itself,
+ * but provides enough implementation for it to function.
+ */
+class _InternalAnalysisContextMock extends TypedMock
+    implements InternalAnalysisContext {
+  AnalysisCache analysisCache;
 
   @override
   List<AnalysisTarget> explicitTargets = <AnalysisTarget>[];
 
-  Map<AnalysisTarget, CacheEntry> entryMap =
-      new HashMap<AnalysisTarget, CacheEntry>();
-
   @override
   List<AnalysisTarget> priorityTargets = <AnalysisTarget>[];
 
-  String name = 'Test Context';
-
-  _TestContext();
-
-  AnalysisOptions get analysisOptions => baseContext.analysisOptions;
-
-  void set analysisOptions(AnalysisOptions options) {
-    baseContext.analysisOptions = options;
-  }
-
-  @override
-  void set analysisPriorityOrder(List<Source> sources) {
-    baseContext.analysisPriorityOrder = sources;
-  }
-
-  @override
-  set contentCache(ContentCache value) {
-    baseContext.contentCache = value;
-  }
-
-  @override
-  DeclaredVariables get declaredVariables => baseContext.declaredVariables;
-
-  @override
-  List<Source> get htmlSources => baseContext.htmlSources;
-
-  @override
-  bool get isDisposed => baseContext.isDisposed;
-
-  @override
-  List<Source> get launchableClientLibrarySources =>
-      baseContext.launchableClientLibrarySources;
-
-  @override
-  List<Source> get launchableServerLibrarySources =>
-      baseContext.launchableServerLibrarySources;
-
-  @override
-  LibraryResolverFactory get libraryResolverFactory =>
-      baseContext.libraryResolverFactory;
-
-  @override
-  List<Source> get librarySources => baseContext.librarySources;
-
-  @override
-  Stream<SourcesChangedEvent> get onSourcesChanged =>
-      baseContext.onSourcesChanged;
-
-  @override
-  List<Source> get prioritySources => baseContext.prioritySources;
-
-  @override
-  ResolverVisitorFactory get resolverVisitorFactory =>
-      baseContext.resolverVisitorFactory;
-
-  SourceFactory get sourceFactory => baseContext.sourceFactory;
-
-  void set sourceFactory(SourceFactory factory) {
-    baseContext.sourceFactory = factory;
-  }
-
-  @override
-  List<Source> get sources => baseContext.sources;
-
-  @override
-  AnalysisContextStatistics get statistics => baseContext.statistics;
-
-  @override
-  TypeProvider get typeProvider => baseContext.typeProvider;
-
-  @override
-  void set typeProvider(TypeProvider typeProvider) {
-    baseContext.typeProvider = typeProvider;
-  }
-
-  @override
-  TypeResolverVisitorFactory get typeResolverVisitorFactory =>
-      baseContext.typeResolverVisitorFactory;
-
-  @override
-  void addListener(AnalysisListener listener) {
-    baseContext.addListener(listener);
-  }
-
-  @override
-  void addSourceInfo(Source source, SourceEntry info) {
-    baseContext.addSourceInfo(source, info);
-  }
-
-  @override
-  void applyAnalysisDelta(AnalysisDelta delta) {
-    baseContext.applyAnalysisDelta(delta);
-  }
-
-  @override
-  void applyChanges(ChangeSet changeSet) {
-    baseContext.applyChanges(changeSet);
-  }
-
-  @override
-  String computeDocumentationComment(Element element) {
-    return baseContext.computeDocumentationComment(element);
-  }
-
-  @override
-  List<AnalysisError> computeErrors(Source source) {
-    return baseContext.computeErrors(source);
-  }
-
-  @override
-  List<Source> computeExportedLibraries(Source source) {
-    return baseContext.computeExportedLibraries(source);
-  }
-
-  @override
-  HtmlElement computeHtmlElement(Source source) {
-    return baseContext.computeHtmlElement(source);
-  }
-
-  @override
-  List<Source> computeImportedLibraries(Source source) {
-    return baseContext.computeImportedLibraries(source);
-  }
-
-  @override
-  SourceKind computeKindOf(Source source) {
-    return baseContext.computeKindOf(source);
-  }
-
-  @override
-  LibraryElement computeLibraryElement(Source source) {
-    return baseContext.computeLibraryElement(source);
-  }
-
-  @override
-  LineInfo computeLineInfo(Source source) {
-    return baseContext.computeLineInfo(source);
-  }
-
-  @override
-  CompilationUnit computeResolvableCompilationUnit(Source source) {
-    return baseContext.computeResolvableCompilationUnit(source);
-  }
-
-  @override
-  CancelableFuture<CompilationUnit> computeResolvedCompilationUnitAsync(
-      Source source, Source librarySource) {
-    return baseContext.computeResolvedCompilationUnitAsync(
-        source, librarySource);
-  }
-
-  @override
-  void dispose() {
-    baseContext.dispose();
-  }
-
-  @override
-  List<CompilationUnit> ensureResolvedDartUnits(Source source) {
-    return baseContext.ensureResolvedDartUnits(source);
-  }
-
-  @override
-  bool exists(Source source) {
-    return baseContext.exists(source);
+  _InternalAnalysisContextMock() {
+    analysisCache = new AnalysisCache([new UniversalCachePartition(this)]);
   }
 
   @override
   CacheEntry getCacheEntry(AnalysisTarget target) {
-    return entryMap.putIfAbsent(target, () => new CacheEntry());
+    CacheEntry entry = analysisCache.get(target);
+    if (entry == null) {
+      entry = new CacheEntry(target);
+      analysisCache.put(entry);
+    }
+    return entry;
   }
 
-  @override
-  CompilationUnitElement getCompilationUnitElement(
-      Source unitSource, Source librarySource) {
-    return baseContext.getCompilationUnitElement(unitSource, librarySource);
-  }
+  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/**
+ * Concrete class for testing [CycleAwareDependencyWalker] behavior.
+ */
+class _TestCycleAwareDependencyWalker extends CycleAwareDependencyWalker<int> {
+  final Map<int, List<int>> graph;
+
+  Set<int> evaluatedNodes = new Set<int>();
+
+  _TestCycleAwareDependencyWalker(this.graph, int startingNode)
+      : super(startingNode);
 
   @override
-  TimestampedData<String> getContents(Source source) {
-    return baseContext.getContents(source);
+  int getNextInput(int node, List<int> skipInputs) {
+    for (int dependency in graph[node]) {
+      if (!skipInputs.contains(dependency) &&
+          !evaluatedNodes.contains(dependency)) {
+        return dependency;
+      }
+    }
+    return null;
   }
+}
 
-  @override
-  InternalAnalysisContext getContextFor(Source source) {
-    return baseContext.getContextFor(source);
-  }
-
-  @override
-  Element getElement(ElementLocation location) {
-    return baseContext.getElement(location);
-  }
-
-  @override
-  AnalysisErrorInfo getErrors(Source source) {
-    return baseContext.getErrors(source);
-  }
-
-  @override
-  HtmlElement getHtmlElement(Source source) {
-    return baseContext.getHtmlElement(source);
-  }
-
-  @override
-  List<Source> getHtmlFilesReferencing(Source source) {
-    return baseContext.getHtmlFilesReferencing(source);
-  }
-
-  @override
-  SourceKind getKindOf(Source source) {
-    return baseContext.getKindOf(source);
-  }
-
-  @override
-  List<Source> getLibrariesContaining(Source source) {
-    return baseContext.getLibrariesContaining(source);
-  }
-
-  @override
-  List<Source> getLibrariesDependingOn(Source librarySource) {
-    return baseContext.getLibrariesDependingOn(librarySource);
-  }
-
-  @override
-  List<Source> getLibrariesReferencedFromHtml(Source htmlSource) {
-    return baseContext.getLibrariesReferencedFromHtml(htmlSource);
-  }
-
-  @override
-  LibraryElement getLibraryElement(Source source) {
-    return baseContext.getLibraryElement(source);
-  }
-
-  @override
-  LineInfo getLineInfo(Source source) {
-    return baseContext.getLineInfo(source);
-  }
-
-  @override
-  int getModificationStamp(Source source) {
-    return baseContext.getModificationStamp(source);
-  }
-
-  @override
-  Namespace getPublicNamespace(LibraryElement library) {
-    return baseContext.getPublicNamespace(library);
-  }
-
-  @override
-  CompilationUnit getResolvedCompilationUnit(
-      Source unitSource, LibraryElement library) {
-    return baseContext.getResolvedCompilationUnit(unitSource, library);
-  }
-
-  @override
-  CompilationUnit getResolvedCompilationUnit2(
-      Source unitSource, Source librarySource) {
-    return baseContext.getResolvedCompilationUnit2(unitSource, librarySource);
-  }
-
-  @override
-  HtmlUnit getResolvedHtmlUnit(Source htmlSource) {
-    return baseContext.getResolvedHtmlUnit(htmlSource);
-  }
-
-  @override
-  List<Source> getSourcesWithFullName(String path) {
-    return baseContext.getSourcesWithFullName(path);
-  }
-
-  @override
-  bool handleContentsChanged(
-      Source source, String originalContents, String newContents, bool notify) {
-    return baseContext.handleContentsChanged(
-        source, originalContents, newContents, notify);
-  }
-
-  @override
-  bool isClientLibrary(Source librarySource) {
-    return baseContext.isClientLibrary(librarySource);
-  }
-
-  @override
-  bool isServerLibrary(Source librarySource) {
-    return baseContext.isServerLibrary(librarySource);
-  }
-
-  @override
-  CompilationUnit parseCompilationUnit(Source source) {
-    return baseContext.parseCompilationUnit(source);
-  }
-
-  @override
-  HtmlUnit parseHtmlUnit(Source source) {
-    return baseContext.parseHtmlUnit(source);
-  }
-
-  @override
-  AnalysisResult performAnalysisTask() {
-    return baseContext.performAnalysisTask();
-  }
-
-  @override
-  void recordLibraryElements(Map<Source, LibraryElement> elementMap) {
-    baseContext.recordLibraryElements(elementMap);
-  }
-
-  @override
-  void removeListener(AnalysisListener listener) {
-    baseContext.removeListener(listener);
-  }
-
-  @override
-  CompilationUnit resolveCompilationUnit(
-      Source unitSource, LibraryElement library) {
-    return baseContext.resolveCompilationUnit(unitSource, library);
-  }
-
-  @override
-  CompilationUnit resolveCompilationUnit2(
-      Source unitSource, Source librarySource) {
-    return baseContext.resolveCompilationUnit2(unitSource, librarySource);
-  }
-
-  @override
-  HtmlUnit resolveHtmlUnit(Source htmlSource) {
-    return baseContext.resolveHtmlUnit(htmlSource);
-  }
-
-  @override
-  void setChangedContents(Source source, String contents, int offset,
-      int oldLength, int newLength) {
-    baseContext.setChangedContents(
-        source, contents, offset, oldLength, newLength);
-  }
-
-  @override
-  void setContents(Source source, String contents) {
-    baseContext.setContents(source, contents);
-  }
-
-  @override
-  void visitCacheItems(void callback(Source source, SourceEntry dartEntry,
-      DataDescriptor rowDesc, CacheState state)) {
-    baseContext.visitCacheItems(callback);
-  }
+class _WorkManagerMock extends TypedMock implements WorkManager {
+  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

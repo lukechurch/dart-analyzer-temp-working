@@ -156,7 +156,7 @@ class StaticTypeAnalyzer extends SimpleAstVisitor<Object> {
         _resolver.recordPropagatedTypeIfBetter(node, propagatedType);
         overrideType = propagatedType;
       }
-      _resolver.overrideExpression(node.leftHandSide, overrideType, true);
+      _resolver.overrideExpression(node.leftHandSide, overrideType, true, true);
     } else if (operator == sc.TokenType.QUESTION_QUESTION_EQ) {
       // The static type of a compound assignment using ??= is the least upper
       // bound of the static types of the LHS and RHS.
@@ -622,8 +622,7 @@ class StaticTypeAnalyzer extends SimpleAstVisitor<Object> {
                   newFutureType = returnType as InterfaceTypeImpl;
                 } else {
                   InterfaceType futureType = targetType as InterfaceType;
-                  newFutureType =
-                      new InterfaceTypeImpl.con1(futureType.element);
+                  newFutureType = new InterfaceTypeImpl(futureType.element);
                   newFutureType.typeArguments = <DartType>[returnType];
                 }
                 // set the 'then' invocation type

@@ -1264,6 +1264,34 @@ class A {
 ''');
   }
 
+  void test_false_method_parameters_type_edit_insertImportPrefix() {
+    _assertDoesNotMatchOK(r'''
+import 'dart:async' as a;
+
+class C {
+  void foo(Future f) {}
+}
+
+class Future {}
+
+bar(C c, a.Future f) {
+  c.foo(f);
+}
+''', r'''
+import 'dart:async' as a;
+
+class C {
+  void foo(a.Future f) {}
+}
+
+class Future {}
+
+bar(C c, a.Future f) {
+  c.foo(f);
+}
+''');
+  }
+
   void test_false_method_returnType_edit() {
     _assertDoesNotMatchOK(r'''
 class A {
@@ -2202,6 +2230,22 @@ class A {
 ''');
   }
 
+  void test_true_method_parameters_type_sameImportPrefix() {
+    _assertMatches(r'''
+import 'dart:async' as a;
+
+bar(a.Future f) {
+  print(f);
+}
+''', r'''
+import 'dart:async' as a;
+
+bar(a.Future ff) {
+  print(ff);
+}
+''');
+  }
+
   void test_true_part_list_reorder() {
     addNamedSource('/unitA.dart', 'part of lib; class A {}');
     addNamedSource('/unitB.dart', 'part of lib; class B {}');
@@ -2403,7 +2447,7 @@ class B extends Object with A {}
   void _assertMatchKind(
       DeclarationMatchKind expectMatch, String oldContent, String newContent) {
     Source source = addSource(oldContent);
-    LibraryElement library = resolve(source);
+    LibraryElement library = resolve2(source);
     CompilationUnit oldUnit = resolveCompilationUnit(source, library);
     // parse
     CompilationUnit newUnit = ParserTestCase.parseCompilationUnit(newContent);
@@ -2426,6 +2470,17 @@ class IncrementalResolverTest extends ResolverTestCase {
   String code;
   LibraryElement library;
   CompilationUnit unit;
+
+  @override
+  void reset() {
+    analysisContext2 = AnalysisContextFactory.oldContextWithCore();
+  }
+
+  @override
+  void resetWithOptions(AnalysisOptions options) {
+    analysisContext2 =
+        AnalysisContextFactory.oldContextWithCoreAndOptions(options);
+  }
 
   void setUp() {
     super.setUp();
@@ -2758,7 +2813,9 @@ class B {
     int updateEndOld = updateOffset + edit.length;
     int updateOldNew = updateOffset + edit.replacement.length;
     IncrementalResolver resolver = new IncrementalResolver(
-        unit.element, updateOffset, updateEndOld, updateOldNew);
+        (analysisContext2 as AnalysisContextImpl)
+            .getReadableSourceEntryOrNull(source), null, null, unit.element,
+        updateOffset, updateEndOld, updateOldNew);
     bool success = resolver.resolve(newNode);
     expect(success, isTrue);
     List<AnalysisError> newErrors = analysisContext.computeErrors(source);
@@ -2767,7 +2824,7 @@ class B {
     {
       source = addSource(newCode);
       _runTasks();
-      LibraryElement library = resolve(source);
+      LibraryElement library = resolve2(source);
       fullNewUnit = resolveCompilationUnit(source, library);
     }
     try {
@@ -2786,7 +2843,7 @@ class B {
   void _resolveUnit(String code) {
     this.code = code;
     source = addSource(code);
-    library = resolve(source);
+    library = resolve2(source);
     unit = resolveCompilationUnit(source, library);
     _runTasks();
   }
@@ -2800,7 +2857,7 @@ class B {
 
   static AstNode _findNodeAt(
       CompilationUnit oldUnit, int offset, Predicate<AstNode> predicate) {
-    NodeLocator locator = new NodeLocator.con1(offset);
+    NodeLocator locator = new NodeLocator(offset);
     AstNode node = locator.searchWithin(oldUnit);
     return node.getAncestor(predicate);
   }
@@ -3811,7 +3868,7 @@ f3() {
   void _resolveUnit(String code) {
     this.code = code;
     source = addSource(code);
-    oldLibrary = resolve(source);
+    oldLibrary = resolve2(source);
     oldUnit = resolveCompilationUnit(source, oldLibrary);
     oldUnitElement = oldUnit.element;
   }
@@ -3851,7 +3908,7 @@ f3() {
       source = addSource(newCode + ' ');
       source = addSource(newCode);
       _runTasks();
-      LibraryElement library = resolve(source);
+      LibraryElement library = resolve2(source);
       CompilationUnit fullNewUnit = resolveCompilationUnit(source, library);
       // Validate tokens.
       _assertEqualTokens(newUnit, fullNewUnit);

@@ -89,21 +89,12 @@ class AnalysisError {
   bool isStaticOnly = false;
 
   /**
-   * Initialize a newly created analysis error for the specified [source]. The
-   * error will have the given [errorCode] and the list of [arguments] will be
-   * used to complete the message. The error has no location information.
+   * Initialize a newly created analysis error. The error is associated with the
+   * given [source] and is located at the given [offset] with the given
+   * [length]. The error will have the given [errorCode] and the list of
+   * [arguments] will be used to complete the message.
    */
-  AnalysisError.con1(this.source, this.errorCode, [List<Object> arguments]) {
-    this._message = formatList(errorCode.message, arguments);
-  }
-
-  /**
-   * Initialize a newly created analysis error for the specified [source] at the
-   * given [offset] with the given [length]. The error will have the given
-   * [errorCode] and the list of [arguments] will be used to complete the
-   * message.
-   */
-  AnalysisError.con2(this.source, this.offset, int length, this.errorCode,
+  AnalysisError(this.source, this.offset, int length, this.errorCode,
       [List<Object> arguments]) {
     this._length = length;
     this._message = formatList(errorCode.message, arguments);
@@ -112,6 +103,27 @@ class AnalysisError {
       this._correction = formatList(correctionTemplate, arguments);
     }
   }
+
+  /**
+   * Initialize a newly created analysis error for the specified [source]. The
+   * error will have the given [errorCode] and the list of [arguments] will be
+   * used to complete the message. The error has no location information.
+   */
+  @deprecated // Use new AnalysisError(source, 0, 0, errorCode, arguments)
+  AnalysisError.con1(Source source, ErrorCode errorCode,
+      [List<Object> arguments])
+      : this(source, 0, 0, errorCode, arguments);
+
+  /**
+   * Initialize a newly created analysis error for the specified [source] at the
+   * given [offset] with the given [length]. The error will have the given
+   * [errorCode] and the list of [arguments] will be used to complete the
+   * message.
+   */
+  @deprecated // Use new AnalysisError(source, offset, length, errorCode, arguments)
+  AnalysisError.con2(Source source, int offset, int length, ErrorCode errorCode,
+      [List<Object> arguments])
+      : this(source, offset, length, errorCode, arguments);
 
   /**
    * Return the template used to create the correction to be displayed for this
@@ -191,6 +203,18 @@ class AnalysisError {
     buffer.write(_message);
     return buffer.toString();
   }
+
+  /**
+   * Merge all of the errors in the lists in the given list of [errorLists] into
+   * a single list of errors.
+   */
+  static List<AnalysisError> mergeLists(List<List<AnalysisError>> errorLists) {
+    Set<AnalysisError> errors = new HashSet<AnalysisError>();
+    for (List<AnalysisError> errorList in errorLists) {
+      errors.addAll(errorList);
+    }
+    return errors.toList();
+  }
 }
 
 /**
@@ -232,13 +256,25 @@ class AnalysisErrorWithProperties extends AnalysisError {
       new HashMap<ErrorProperty, Object>();
 
   /**
+   * Initialize a newly created analysis error. The error is associated with the
+   * given [source] and is located at the given [offset] with the given
+   * [length]. The error will have the given [errorCode] and the list of
+   * [arguments] will be used to complete the message.
+   */
+  AnalysisErrorWithProperties(
+      Source source, int offset, int length, ErrorCode errorCode,
+      [List<Object> arguments])
+      : super(source, offset, length, errorCode, arguments);
+
+  /**
    * Initialize a newly created analysis error for the specified [source]. The
    * error will have the given [errorCode] and the list of [arguments] will be
    * used to complete the message. The error has no location information.
    */
+  @deprecated // Use new AnalysisErrorWithProperties(source, 0, 0, errorCode, arguments)
   AnalysisErrorWithProperties.con1(Source source, ErrorCode errorCode,
       [List<Object> arguments])
-      : super.con1(source, errorCode, arguments);
+      : this(source, 0, 0, errorCode, arguments);
 
   /**
    * Initialize a newly created analysis error for the specified [source] at the
@@ -246,10 +282,11 @@ class AnalysisErrorWithProperties extends AnalysisError {
    * [errorCode] and the list of [arguments] will be used to complete the
    * message.
    */
+  @deprecated // Use new AnalysisErrorWithProperties(source, offset, length, errorCode, arguments)
   AnalysisErrorWithProperties.con2(
       Source source, int offset, int length, ErrorCode errorCode,
       [List<Object> arguments])
-      : super.con2(source, offset, length, errorCode, arguments);
+      : this(source, offset, length, errorCode, arguments);
 
   @override
   Object getProperty(ErrorProperty property) => _propertyMap[property];
@@ -480,7 +517,7 @@ class CompileTimeErrorCode extends ErrorCode {
    */
   static const CompileTimeErrorCode BUILT_IN_IDENTIFIER_AS_TYPE =
       const CompileTimeErrorCode('BUILT_IN_IDENTIFIER_AS_TYPE',
-          "The built-in identifier '{0}' cannot be as a type");
+          "The built-in identifier '{0}' cannot be used as a type");
 
   /**
    * 12.30 Identifier Reference: It is a compile-time error if a built-in
@@ -1912,6 +1949,14 @@ class CompileTimeErrorCode extends ErrorCode {
           "The name '{0}' is already used as an import prefix and cannot be used to name a top-level element");
 
   /**
+   * 16.32 Identifier Reference: If d is a prefix p, a compile-time error
+   * occurs unless the token immediately following d is '.'.
+   */
+  static const CompileTimeErrorCode PREFIX_IDENTIFIER_NOT_FOLLOWED_BY_DOT =
+      const CompileTimeErrorCode('PREFIX_IDENTIFIER_NOT_FOLLOWED_BY_DOT',
+          "The name '{0}' refers to an import prefix, so it must be followed by '.'");
+
+  /**
    * 6.2.2 Optional Formals: It is a compile-time error if the name of a named
    * optional parameter begins with an '_' character.
    */
@@ -1924,7 +1969,8 @@ class CompileTimeErrorCode extends ErrorCode {
    * constant expression depends on itself.
    */
   static const CompileTimeErrorCode RECURSIVE_COMPILE_TIME_CONSTANT =
-      const CompileTimeErrorCode('RECURSIVE_COMPILE_TIME_CONSTANT', "");
+      const CompileTimeErrorCode('RECURSIVE_COMPILE_TIME_CONSTANT',
+          "Compile-time constant expression depends on itself");
 
   /**
    * 7.6.1 Generative Constructors: A generative constructor may be redirecting,
@@ -2458,7 +2504,7 @@ class ErrorReporter {
    */
   AnalysisErrorWithProperties newErrorWithProperties(
           ErrorCode errorCode, AstNode node, List<Object> arguments) =>
-      new AnalysisErrorWithProperties.con2(
+      new AnalysisErrorWithProperties(
           _source, node.offset, node.length, errorCode, arguments);
 
   /**
@@ -2506,7 +2552,7 @@ class ErrorReporter {
   void reportErrorForOffset(ErrorCode errorCode, int offset, int length,
       [List<Object> arguments]) {
     _errorListener.onError(
-        new AnalysisError.con2(_source, offset, length, errorCode, arguments));
+        new AnalysisError(_source, offset, length, errorCode, arguments));
   }
 
   /**
@@ -3062,6 +3108,38 @@ class HintCode extends ErrorCode {
 
   @override
   ErrorType get type => ErrorType.HINT;
+}
+
+/**
+ * The error codes used for errors in HTML files. The convention for this
+ * class is for the name of the error code to indicate the problem that caused
+ * the error to be generated and for the error message to explain what is wrong
+ * and, when appropriate, how the problem can be corrected.
+ */
+class HtmlErrorCode extends ErrorCode {
+  /**
+   * An error code indicating that there is a syntactic error in the file.
+   *
+   * Parameters:
+   * 0: the error message from the parse error
+   */
+  static const HtmlErrorCode PARSE_ERROR =
+      const HtmlErrorCode('PARSE_ERROR', '{0}');
+
+  /**
+   * Initialize a newly created error code to have the given [name]. The message
+   * associated with the error will be created from the given [message]
+   * template. The correction associated with the error will be created from the
+   * given [correction] template.
+   */
+  const HtmlErrorCode(String name, String message, [String correction])
+      : super(name, message, correction);
+
+  @override
+  ErrorSeverity get errorSeverity => ErrorSeverity.ERROR;
+
+  @override
+  ErrorType get type => ErrorType.COMPILE_TIME_ERROR;
 }
 
 /**

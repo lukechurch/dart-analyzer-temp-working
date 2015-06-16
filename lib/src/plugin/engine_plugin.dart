@@ -7,6 +7,7 @@ library analyzer.src.plugin.engine_plugin;
 import 'package:analyzer/plugin/task.dart';
 import 'package:analyzer/src/task/dart.dart';
 import 'package:analyzer/src/task/general.dart';
+import 'package:analyzer/src/task/html.dart';
 import 'package:analyzer/task/model.dart';
 import 'package:plugin/plugin.dart';
 
@@ -72,12 +73,20 @@ class EnginePlugin implements Plugin {
     registerExtension(taskId, BuildPublicNamespaceTask.DESCRIPTOR);
     registerExtension(taskId, BuildSourceClosuresTask.DESCRIPTOR);
     registerExtension(taskId, BuildTypeProviderTask.DESCRIPTOR);
+    registerExtension(taskId, ComputeConstantDependenciesTask.DESCRIPTOR);
+    registerExtension(taskId, ComputeConstantValueTask.DESCRIPTOR);
+    registerExtension(taskId, ContainingLibrariesTask.DESCRIPTOR);
+    registerExtension(taskId, DartErrorsTask.DESCRIPTOR);
+    registerExtension(taskId, EvaluateUnitConstantsTask.DESCRIPTOR);
     registerExtension(taskId, GatherUsedImportedElementsTask.DESCRIPTOR);
     registerExtension(taskId, GatherUsedLocalElementsTask.DESCRIPTOR);
     registerExtension(taskId, GenerateHintsTask.DESCRIPTOR);
+    registerExtension(taskId, LibraryErrorsReadyTask.DESCRIPTOR);
+    registerExtension(taskId, LibraryUnitErrorsTask.DESCRIPTOR);
     registerExtension(taskId, ParseDartTask.DESCRIPTOR);
+    registerExtension(taskId, ResolveLibraryReferencesTask.DESCRIPTOR);
     registerExtension(taskId, ResolveLibraryTypeNamesTask.DESCRIPTOR);
-    registerExtension(taskId, ResolveReferencesTask.DESCRIPTOR);
+    registerExtension(taskId, ResolveUnitReferencesTask.DESCRIPTOR);
     registerExtension(taskId, ResolveUnitTypeNamesTask.DESCRIPTOR);
     registerExtension(taskId, ResolveVariableReferencesTask.DESCRIPTOR);
     registerExtension(taskId, ScanDartTask.DESCRIPTOR);
@@ -85,6 +94,9 @@ class EnginePlugin implements Plugin {
     //
     // Register HTML tasks.
     //
+    registerExtension(taskId, HtmlErrorsTask.DESCRIPTOR);
+    registerExtension(taskId, ParseHtmlTask.DESCRIPTOR);
+    registerExtension(taskId, ReferencedLibrariesTask.DESCRIPTOR);
   }
 
   /**

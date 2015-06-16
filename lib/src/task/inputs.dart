@@ -16,6 +16,11 @@ import 'package:analyzer/task/model.dart';
 typedef TaskInput<E> GenerateTaskInputs<B, E>(B object);
 
 /**
+ * A function that maps one [value] to another value.
+ */
+typedef R Mapper<P, R>(P value);
+
+/**
  * An input to an [AnalysisTask] that is computed by accessing a single result
  * defined on a single target.
  */
@@ -180,14 +185,14 @@ abstract class MapTaskInputMixin<K, V> implements MapTaskInput<K, V> {
  * Finally, each of the task inputs are used to access analysis results,
  * and the list of the results is used as the input.
  */
-class MapToFlattenListTaskInput<K, V, E> implements TaskInput<List<E>> {
+class MapToFlattenListTaskInput<K, V, E> extends TaskInputImpl<List<E>> {
   final MapTaskInput<K, List<V>> base;
   final BinaryFunction<K, V, E> mapper;
 
   MapToFlattenListTaskInput(this.base, this.mapper);
 
   @override
-  TaskInputBuilder<List> createBuilder() {
+  TaskInputBuilder<List<E>> createBuilder() {
     return new MapToFlattenListTaskInputBuilder<K, V, E>(base, mapper);
   }
 }
@@ -236,6 +241,15 @@ class MapToFlattenListTaskInputBuilder<K, V, E>
   }
 
   @override
+  void currentValueNotAvailable() {
+    if (currentBuilder == null) {
+      throw new StateError(
+          'Cannot set the result value when there is no current result');
+    }
+    currentBuilder.currentValueNotAvailable();
+  }
+
+  @override
   bool moveNext() {
     // Prepare base Map.
     if (baseMap == null) {
@@ -243,6 +257,11 @@ class MapToFlattenListTaskInputBuilder<K, V, E>
         return true;
       }
       baseMap = currentBuilder.inputValue;
+      if (baseMap == null) {
+        // No base map could be computed due to a circular dependency.  Use an
+        // empty map so that no further results will be computed.
+        baseMap = {};
+      }
       keyIterator = baseMap.keys.iterator;
       // Done with this builder.
       currentBuilder = null;
@@ -254,7 +273,9 @@ class MapToFlattenListTaskInputBuilder<K, V, E>
       }
       // Add the result value for the current Map key/value.
       E resultValue = currentBuilder.inputValue;
-      inputValue.add(resultValue);
+      if (resultValue != null) {
+        inputValue.add(resultValue);
+      }
       // Done with this builder.
       currentBuilder = null;
     }
@@ -277,10 +298,139 @@ class MapToFlattenListTaskInputBuilder<K, V, E>
 }
 
 /**
+ * An input to an [AnalysisTask] that is computed by mapping the value of
+ * another task input to a list of values.
+ */
+class ObjectToListTaskInput<E> extends TaskInputImpl<List<E>> with ListTaskInputMixin<E>
+    implements ListTaskInput<E> {
+  /**
+   * The input used to compute the value to be mapped.
+   */
+  final TaskInput baseInput;
+
+  /**
+   * The function used to map the value of the base input to the list of values.
+   */
+  final Mapper<Object, List<E>> mapper;
+
+  /**
+   * Initialize a newly created task input that computes the input by accessing
+   * the given [result] associated with the given [target].
+   */
+  ObjectToListTaskInput(this.baseInput, this.mapper);
+
+  @override
+  TaskInputBuilder<List<E>> createBuilder() =>
+      new ObjectToListTaskInputBuilder<E>(this);
+
+  @override
+  ListTaskInput /*<V>*/ toListOf(ResultDescriptor /*<V>*/ valueResult) {
+    return new ListToListTaskInput<E, dynamic /*V*/ >(
+        this, valueResult.of as dynamic);
+  }
+
+  @override
+  MapTaskInput<AnalysisTarget, dynamic /*V*/ > toMapOf(
+      ResultDescriptor /*<V>*/ valueResult) {
+    return new ListToMapTaskInput<AnalysisTarget, dynamic /*V*/ >(
+        this as dynamic, valueResult.of);
+  }
+}
+
+/**
+ * A [TaskInputBuilder] used to build an input based on a [SimpleTaskInput].
+ */
+class ObjectToListTaskInputBuilder<E> implements TaskInputBuilder<List<E>> {
+  /**
+   * The input being built.
+   */
+  final ObjectToListTaskInput<E> input;
+
+  /**
+   * The builder created by the input.
+   */
+  TaskInputBuilder builder;
+
+  /**
+   * The value of the input being built, or `null` if the value hasn't been set
+   * yet or if no result is available ([currentValueNotAvailable] was called).
+   */
+  List<E> _inputValue = null;
+
+  /**
+   * Initialize a newly created task input builder that computes the result
+   * specified by the given [input].
+   */
+  ObjectToListTaskInputBuilder(this.input) {
+    builder = input.baseInput.createBuilder();
+  }
+
+  @override
+  ResultDescriptor get currentResult {
+    if (builder == null) {
+      return null;
+    }
+    return builder.currentResult;
+  }
+
+  @override
+  AnalysisTarget get currentTarget {
+    if (builder == null) {
+      return null;
+    }
+    return builder.currentTarget;
+  }
+
+  @override
+  void set currentValue(Object value) {
+    if (builder == null) {
+      throw new StateError(
+          'Cannot set the result value when there is no current result');
+    }
+    builder.currentValue = value;
+  }
+
+  @override
+  List<E> get inputValue {
+    if (builder != null) {
+      throw new StateError('Result value has not been created');
+    }
+    return _inputValue;
+  }
+
+  @override
+  void currentValueNotAvailable() {
+    if (builder == null) {
+      throw new StateError(
+          'Cannot set the result value when there is no current result');
+    }
+    builder.currentValueNotAvailable();
+  }
+
+  @override
+  bool moveNext() {
+    if (builder == null) {
+      return false;
+    } else if (builder.moveNext()) {
+      return true;
+    } else {
+      // This might not be the right semantics. If the value could not be
+      // computed then we pass the resulting `null` in to the mapper function.
+      // Unfortunately, we cannot tell the difference between a `null` that's
+      // there because no value could be computed and a `null` that's there
+      // because that's what *was* computed.
+      _inputValue = input.mapper(builder.inputValue);
+      builder = null;
+      return false;
+    }
+  }
+}
+
+/**
  * An input to an [AnalysisTask] that is computed by accessing a single result
  * defined on a single target.
  */
-class SimpleTaskInput<V> implements TaskInput<V> {
+class SimpleTaskInput<V> extends TaskInputImpl<V> {
   /**
    * The target on which the result is defined.
    */
@@ -329,7 +479,8 @@ class SimpleTaskInputBuilder<V> implements TaskInputBuilder<V> {
   final SimpleTaskInput<V> input;
 
   /**
-   * The value of the input being built.
+   * The value of the input being built.  `null` if the value hasn't been set
+   * yet, or if no result is available ([currentValueNotAvailable] was called).
    */
   V _resultValue = null;
 
@@ -374,6 +525,16 @@ class SimpleTaskInputBuilder<V> implements TaskInputBuilder<V> {
   }
 
   @override
+  void currentValueNotAvailable() {
+    if (_state != _AT) {
+      throw new StateError(
+          'Cannot set the result value when there is no current result');
+    }
+    _resultValue = null;
+    _resultSet = true;
+  }
+
+  @override
   bool moveNext() {
     if (_state == _BEFORE) {
       _state = _AT;
@@ -386,6 +547,13 @@ class SimpleTaskInputBuilder<V> implements TaskInputBuilder<V> {
       _state = _AFTER;
       return false;
     }
+  }
+}
+
+abstract class TaskInputImpl<V> implements TaskInput<V> {
+  @override
+  ListTaskInput /*<E>*/ mappedToList(List /*<E>*/ mapper(V value)) {
+    return new ObjectToListTaskInput(this, mapper);
   }
 }
 
@@ -470,6 +638,15 @@ class TopLevelTaskInputBuilder
   String get _currentName => inputNames[nameIndex];
 
   @override
+  void currentValueNotAvailable() {
+    if (currentBuilder == null) {
+      throw new StateError(
+          'Cannot set the result value when there is no current result');
+    }
+    currentBuilder.currentValueNotAvailable();
+  }
+
+  @override
   bool moveNext() {
     if (nameIndex >= inputNames.length) {
       // We have already computed all of the results, so just return false.
@@ -485,7 +662,9 @@ class TopLevelTaskInputBuilder
         // current name.
         return true;
       }
-      inputs[_currentName] = currentBuilder.inputValue;
+      if (currentBuilder.inputValue != null) {
+        inputs[_currentName] = currentBuilder.inputValue;
+      }
       nameIndex++;
     }
     if (nameIndex >= inputNames.length) {
@@ -508,7 +687,7 @@ class TopLevelTaskInputBuilder
  * input. Finally, each of the task inputs are used to access analysis results,
  * and a collection of the analysis results is used as the input to the task.
  */
-abstract class _ListToCollectionTaskInput<B, E, C> implements TaskInput<C> {
+abstract class _ListToCollectionTaskInput<B, E, C> extends TaskInputImpl<C> {
   /**
    * The accessor used to access the list of elements being mapped.
    */
@@ -605,6 +784,15 @@ abstract class _ListToCollectionTaskInputBuilder<B, E, C>
   C get _resultValue;
 
   @override
+  void currentValueNotAvailable() {
+    if (currentBuilder == null) {
+      throw new StateError(
+          'Cannot set the result value when there is no current result');
+    }
+    currentBuilder.currentValueNotAvailable();
+  }
+
+  @override
   bool moveNext() {
     if (currentBuilder == null) {
       if (_resultValue == null) {
@@ -624,11 +812,18 @@ abstract class _ListToCollectionTaskInputBuilder<B, E, C>
       // We have finished computing the list of values from which the results
       // will be derived.
       _baseList = currentBuilder.inputValue;
+      if (_baseList == null) {
+        // No base list could be computed due to a circular dependency.  Use an
+        // empty list so that no further results will be computed.
+        _baseList = [];
+      }
       _baseListIndex = 0;
       _initResultValue();
     } else {
       // We have finished computing one of the elements in the result list.
-      _addResultElement(_baseListElement, currentBuilder.inputValue);
+      if (currentBuilder.inputValue != null) {
+        _addResultElement(_baseListElement, currentBuilder.inputValue);
+      }
       _baseListIndex++;
     }
     if (_baseListIndex >= _baseList.length) {
