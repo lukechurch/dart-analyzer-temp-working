@@ -5792,7 +5792,7 @@ class AnalysisEngine {
    * A flag indicating whether the (new) task model should be used to perform
    * analysis.
    */
-  bool useTaskModel = false;
+  bool useTaskModel = true;
 
   /**
    * The task manager used to manage the tasks used to analyze code.
