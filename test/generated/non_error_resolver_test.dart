@@ -271,28 +271,6 @@ main() {
     verify([source]);
   }
 
-  void test_assignment_to_field_with_same_name_as_prefix() {
-    // If p is an import prefix, then within a method body, p = expr should be
-    // considered equivalent to this.p = expr.
-    addNamedSource("/lib.dart", r'''
-library lib;
-''');
-    Source source = addSource(r'''
-import 'lib.dart' as p;
-class Base {
-  var p;
-}
-class Derived extends Base {
-  f() {
-    p = 0;
-  }
-}
-''');
-    computeLibrarySourceErrors(source);
-    assertErrors(source, [HintCode.UNUSED_IMPORT]);
-    verify([source]);
-  }
-
   void test_assignmentToFinal_prefixNegate() {
     Source source = addSource(r'''
 f() {
@@ -2394,9 +2372,6 @@ f([String x = '0']) {
   }
 
   void test_invalidAssignment_ifNullAssignment_compatibleType() {
-    AnalysisOptionsImpl options = new AnalysisOptionsImpl();
-    options.enableNullAwareOperators = true;
-    resetWithOptions(options);
     Source source = addSource('''
 void f(int i) {
   num n;
@@ -2409,9 +2384,6 @@ void f(int i) {
   }
 
   void test_invalidAssignment_ifNullAssignment_sameType() {
-    AnalysisOptionsImpl options = new AnalysisOptionsImpl();
-    options.enableNullAwareOperators = true;
-    resetWithOptions(options);
     Source source = addSource('''
 void f(int i) {
   int j;
@@ -3410,6 +3382,18 @@ abstract class A {
 class B extends A {
   noSuchMethod(v) => '';
 }''');
+    computeLibrarySourceErrors(source);
+    assertNoErrors(source);
+    verify([source]);
+  }
+
+  void test_nonAbstractClassInheritsAbstractMemberOne_overridesMethodInObject() {
+    Source source = addSource(r'''
+class A {
+  String toString([String prefix = '']) => '${prefix}Hello';
+}
+class C {}
+class B extends A with C {}''');
     computeLibrarySourceErrors(source);
     assertNoErrors(source);
     verify([source]);
@@ -5021,9 +5005,6 @@ class Bar extends Foo {
   void test_undefinedGetter_typeLiteral_conditionalAccess() {
     // When applied to a type literal, the conditional access operator '?.' can
     // be used to access instance getters of Type.
-    AnalysisOptionsImpl options = new AnalysisOptionsImpl();
-    options.enableNullAwareOperators = true;
-    resetWithOptions(options);
     Source source = addSource('''
 class A {}
 f() => A?.hashCode;
@@ -5111,9 +5092,6 @@ main() {
   void test_undefinedMethod_typeLiteral_conditionalAccess() {
     // When applied to a type literal, the conditional access operator '?.' can
     // be used to access instance methods of Type.
-    AnalysisOptionsImpl options = new AnalysisOptionsImpl();
-    options.enableNullAwareOperators = true;
-    resetWithOptions(options);
     Source source = addSource('''
 class A {}
 f() => A?.toString();
@@ -5188,28 +5166,6 @@ class B extends A {
 }''');
     computeLibrarySourceErrors(source);
     assertNoErrors(source);
-    verify([source]);
-  }
-
-  void test_unqualified_invocation_of_method_with_same_name_as_prefix() {
-    // If p is an import prefix, then within a method body, p() should be
-    // considered equivalent to this.p().
-    addNamedSource("/lib.dart", r'''
-library lib;
-''');
-    Source source = addSource(r'''
-import 'lib.dart' as p;
-class Base {
-  p() {}
-}
-class Derived extends Base {
-  f() {
-    p();
-  }
-}
-''');
-    computeLibrarySourceErrors(source);
-    assertErrors(source, [HintCode.UNUSED_IMPORT]);
     verify([source]);
   }
 

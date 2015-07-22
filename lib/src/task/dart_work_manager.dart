@@ -42,7 +42,6 @@ class DartWorkManager implements WorkManager {
    * The list of errors that are reported for raw Dart [LibrarySpecificUnit]s.
    */
   static final List<ResultDescriptor> _UNIT_ERRORS = <ResultDescriptor>[
-    BUILD_FUNCTION_TYPE_ALIASES_ERRORS,
     HINTS,
     RESOLVE_REFERENCES_ERRORS,
     RESOLVE_TYPE_NAMES_ERRORS,
@@ -83,7 +82,16 @@ class DartWorkManager implements WorkManager {
   /**
    * Initialize a newly created manager.
    */
-  DartWorkManager(this.context);
+  DartWorkManager(this.context) {
+    analysisCache.onResultInvalidated.listen((InvalidatedResult event) {
+      if (event.descriptor == LIBRARY_ERRORS_READY) {
+        CacheEntry entry = event.entry;
+        if (entry.getValue(SOURCE_KIND) == SourceKind.LIBRARY) {
+          librarySourceQueue.add(entry.target);
+        }
+      }
+    });
+  }
 
   /**
    * Returns the correctly typed result of `context.analysisCache`.
@@ -127,21 +135,6 @@ class DartWorkManager implements WorkManager {
     for (Source removedSource in removedSources) {
       partLibrariesMap.remove(removedSource);
       _onLibrarySourceChangedOrRemoved(removedSource);
-    }
-    // Some of the libraries might have been invalidated, reschedule them.
-    {
-      MapIterator<AnalysisTarget, CacheEntry> iterator =
-          analysisCache.iterator();
-      while (iterator.moveNext()) {
-        AnalysisTarget target = iterator.key;
-        if (_isDartSource(target)) {
-          CacheEntry entry = iterator.value;
-          if (entry.getValue(SOURCE_KIND) == SourceKind.LIBRARY &&
-              entry.getValue(LIBRARY_ERRORS_READY) != true) {
-            librarySourceQueue.add(target);
-          }
-        }
-      }
     }
   }
 

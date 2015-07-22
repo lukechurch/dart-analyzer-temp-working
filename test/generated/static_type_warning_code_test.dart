@@ -54,47 +54,6 @@ f() {}''');
     assertErrors(source, [StaticWarningCode.AMBIGUOUS_IMPORT]);
   }
 
-  void test_assignment_to_prefix_in_method() {
-    // If p is an import prefix, then within a method body, p = expr should be
-    // considered equivalent to this.p = expr.
-    addNamedSource("/lib.dart", r'''
-library lib;
-''');
-    Source source = addSource(r'''
-import 'lib.dart' as p;
-class C {
-  f() {
-    p = 0;
-  }
-}
-''');
-    computeLibrarySourceErrors(source);
-    assertErrors(source, [
-      StaticWarningCode.UNDEFINED_IDENTIFIER,
-      HintCode.UNUSED_IMPORT
-    ]);
-  }
-
-  void test_assignment_to_prefix_not_in_method() {
-    // If p is an import prefix, then outside a method body, p = expr should be
-    // considered equivalent to this.p = expr (and hence should result in a
-    // static warning).
-    addNamedSource("/lib.dart", r'''
-library lib;
-''');
-    Source source = addSource(r'''
-import 'lib.dart' as p;
-f() {
-  p = 0;
-}
-''');
-    computeLibrarySourceErrors(source);
-    assertErrors(source, [
-      StaticWarningCode.UNDEFINED_IDENTIFIER,
-      HintCode.UNUSED_IMPORT
-    ]);
-  }
-
   void test_await_flattened() {
     Source source = addSource('''
 import 'dart:async';
@@ -426,9 +385,6 @@ main() {
   }
 
   void test_invalidAssignment_ifNullAssignment() {
-    AnalysisOptionsImpl options = new AnalysisOptionsImpl();
-    options.enableNullAwareOperators = true;
-    resetWithOptions(options);
     Source source = addSource('''
 void f(int i) {
   double d;
@@ -1352,15 +1308,6 @@ void f() {
     assertErrors(source, [StaticTypeWarningCode.UNDEFINED_FUNCTION]);
   }
 
-  void test_undefinedFunction_hasImportPrefix() {
-    Source source = addSource(r'''
-import 'lib.dart' as f;
-main() { return f(); }''');
-    addNamedSource("/lib.dart", "library lib;");
-    computeLibrarySourceErrors(source);
-    assertErrors(source, [StaticTypeWarningCode.UNDEFINED_FUNCTION]);
-  }
-
   void test_undefinedFunction_inCatch() {
     Source source = addSource(r'''
 void f() {
@@ -1447,9 +1394,6 @@ var a = A.B;''');
   void test_undefinedGetter_static_conditionalAccess() {
     // The conditional access operator '?.' cannot be used to access static
     // fields.
-    AnalysisOptionsImpl options = new AnalysisOptionsImpl();
-    options.enableNullAwareOperators = true;
-    resetWithOptions(options);
     Source source = addSource('''
 class A {
   static var x;
@@ -1567,6 +1511,12 @@ class C {
     assertErrors(source, [StaticTypeWarningCode.UNDEFINED_METHOD]);
   }
 
+  void test_undefinedMethod_leastUpperBoundWithNull() {
+    Source source = addSource('f(bool b, int i) => (b ? null : i).foo();');
+    computeLibrarySourceErrors(source);
+    assertErrors(source, [StaticTypeWarningCode.UNDEFINED_METHOD]);
+  }
+
   void test_undefinedMethod_object_call() {
     AnalysisOptionsImpl options = new AnalysisOptionsImpl();
     options.enableStrictCallChecks = true;
@@ -1615,9 +1565,6 @@ main() {
   void test_undefinedMethod_static_conditionalAccess() {
     // The conditional access operator '?.' cannot be used to access static
     // methods.
-    AnalysisOptionsImpl options = new AnalysisOptionsImpl();
-    options.enableNullAwareOperators = true;
-    resetWithOptions(options);
     Source source = addSource('''
 class A {
   static void m() {}
@@ -1707,9 +1654,6 @@ f() { A.B = 0;}''');
   void test_undefinedSetter_static_conditionalAccess() {
     // The conditional access operator '?.' cannot be used to access static
     // fields.
-    AnalysisOptionsImpl options = new AnalysisOptionsImpl();
-    options.enableNullAwareOperators = true;
-    resetWithOptions(options);
     Source source = addSource('''
 class A {
   static var x;
@@ -1810,46 +1754,6 @@ class B extends A {
 }''');
     computeLibrarySourceErrors(source);
     assertErrors(source, [StaticTypeWarningCode.UNDEFINED_SUPER_SETTER]);
-  }
-
-  void test_unqualified_invocation_of_prefix_in_method() {
-    // If p is an import prefix, then within a method body, p() should be
-    // considered equivalent to this.p().
-    addNamedSource("/lib.dart", r'''
-library lib;
-''');
-    Source source = addSource(r'''
-import 'lib.dart' as p;
-class C {
-  f() {
-    p();
-  }
-}
-''');
-    computeLibrarySourceErrors(source);
-    assertErrors(source, [
-      StaticTypeWarningCode.UNDEFINED_METHOD,
-      HintCode.UNUSED_IMPORT
-    ]);
-    verify([source]);
-  }
-
-  void test_unqualified_invocation_of_prefix_not_in_method() {
-    // If p is an import prefix, then outside a method body, p() should be
-    // considered equivalent to this.p() (and hence should result in a static
-    // warning).
-    addNamedSource("/lib.dart", r'''
-library lib;
-''');
-    Source source = addSource(r'''
-import 'lib.dart' as p;
-f() {
-  p();
-}
-''');
-    computeLibrarySourceErrors(source);
-    assertErrors(source, [StaticTypeWarningCode.UNDEFINED_FUNCTION]);
-    verify([source]);
   }
 
   void test_unqualifiedReferenceToNonLocalStaticMember_getter() {
